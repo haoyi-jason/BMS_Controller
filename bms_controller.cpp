@@ -111,6 +111,11 @@ void BMS_Controller::handleSocketDataReceived()
                 f.close();
                 b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
                 s->write(b);
+                foreach (RemoteSystem *sys, m_clients) {
+                    if(sys->socket == s){
+                        sys->configReady = true;
+                    }
+                }
             }
         }
     }
@@ -120,7 +125,11 @@ void BMS_Controller::handleSocketDataReceived()
 void BMS_Controller::handleDisconnection()
 {
     QTcpSocket *s = (QTcpSocket*)sender();
-    m_clients.removeOne(s);
+    foreach (RemoteSystem *sys, m_clients) {
+        if(sys->socket == s){
+            m_clients.removeOne(sys);
+        }
+    }
 
     qDebug()<<"Client disconnect";
 }
@@ -132,8 +141,10 @@ void BMS_Controller::handleTimeout()
     QDataStream d(&b,QIODevice::ReadWrite);
     d << m_bmsSystem;
     b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_STACK,b.size()));
-    foreach (QTcpSocket *s, m_clients) {
-        s->write(b);
+    foreach (RemoteSystem *sys, m_clients) {
+        if(sys->configReady){
+            sys->socket->write(b);
+        }
     }
 }
 
@@ -144,7 +155,11 @@ void BMS_Controller::handleNewConnection()
         QTcpSocket *client = m_server->nextPendingConnection();
         connect(client,&QTcpSocket::readyRead,this,&BMS_Controller::handleSocketDataReceived);
         connect(client,&QTcpSocket::disconnected,this,&BMS_Controller::handleDisconnection);
-        m_clients.append(client);
+        RemoteSystem *sys = new RemoteSystem();
+        sys->configReady = false;
+        sys->socket = client;
+
+        m_clients.append(sys);
     }
 
 

@@ -6,6 +6,9 @@ class QTcpSocket;
 class QTcpServer;
 class BMS_SystemInfo;
 class QTimer;
+class RemoteSystem;
+
+
 class BMS_Controller : public QObject
 {
     Q_OBJECT
@@ -28,7 +31,8 @@ public slots:
 
 private:
     QTcpServer *m_server = nullptr;
-    QList<QTcpSocket*> m_clients;
+    //QList<QTcpSocket*> m_clients;
+    QList<RemoteSystem*> m_clients;
     bool m_simulator = false;
     BMS_SystemInfo *m_bmsSystem = nullptr;
     QTimer *mTimer;
