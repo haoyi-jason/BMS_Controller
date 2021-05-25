@@ -1,5 +1,5 @@
 QT -= gui
-QT += serialbus network
+QT += core serialbus network
 
 CONFIG += c++11 console
 CONFIG -= app_bundle

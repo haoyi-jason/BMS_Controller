@@ -2,11 +2,35 @@
 #define BMS_CONTROLLER_H
 
 #include <QObject>
+#include <QCanBus>
+#include <QCanBusDevice>
+#include <QCanBusDeviceInfo>
+#include "../BMS_HY01/bms_def.h"
+
 class QTcpSocket;
 class QTcpServer;
 class BMS_SystemInfo;
 class QTimer;
 class RemoteSystem;
+
+class CANBUSDevice{
+public:
+    QString name="";
+    bool connected=false;
+    QList<int> groupList;
+    bool error=false;
+    QString errorString="";
+    int bitrate;
+    QCanBusDevice *dev = nullptr;
+    QCanBusDeviceInfo *info = nullptr;
+};
+
+class MODBUSDevice{
+public:
+    QString portName;
+    int bitrate;
+    bool connected=false;
+};
 
 
 class BMS_Controller : public QObject
@@ -19,6 +43,7 @@ public:
     void stopServer();
     void startCANHandler(QString device);
     void stopCANHandler(QString device);
+    void loadConfig();
 
 signals:
 
@@ -27,6 +52,9 @@ public slots:
     void handleDisconnection();
     void handleNewConnection();
     void handleTimeout();
+    void OnCanBusError(QCanBusDevice::CanBusError error);
+    void OnCanbusReceived();
+
 
 
 private:
@@ -36,6 +64,11 @@ private:
     bool m_simulator = false;
     BMS_SystemInfo *m_bmsSystem = nullptr;
     QTimer *mTimer;
+    QList<QCanBusDevice*> m_canbusDevices;
+    QList<QString> m_devices;
+    QList<QCanBusDeviceInfo> m_canbusDevInfo;
+    QList<CANBUSDevice*> m_canbusDevice;
+    MODBUSDevice *m_modbusDev = nullptr;
 };
 
 #endif // BMS_CONTROLLER_H
