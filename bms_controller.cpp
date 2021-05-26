@@ -52,39 +52,60 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     proc->waitForFinished();
                 }
             }
-        }
-        // load canbus device
-        QString errorString;
-        m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
-
-        if(!errorString.isEmpty()){
-            qDebug()<<errorString;
-        }
-        qDebug()<<"Device found:"<<m_canbusDevInfo.size();
-        if(m_canbusDevInfo.size() == 0){
-            // try to launch canbus device
-            QProcess *proc = new QProcess();
-            proc->execute("ip link set can0 up type can bitrate 250000");
-            proc->waitForFinished();
-            proc->execute("ip link set can1 up type can bitrate 250000");
-            proc->waitForFinished();
+            // check if device count match config
+            // load canbus device
+            QString errorString;
             m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
-        }
-        if(m_canbusDevInfo.size() > 0){
-            m_canbusDevices.clear();
-            foreach(QCanBusDeviceInfo d, m_canbusDevInfo){
-                qDebug()<<d.name();
-                QCanBusDevice *dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(d.name()),&errorString);
-                connect(dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
-                connect(dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
-                dev->connectDevice();
-                m_canbusDevices.append(dev);
+
+            if(!errorString.isEmpty()){
+                qDebug()<<errorString;
+            }
+            qDebug()<<"Device found:"<<m_canbusDevInfo.size();
+            if(m_canbusDevInfo.size() == m_canbusDevice.size()){
+                m_simulator = false;
+                // start can device and register handler
+                foreach (CANBUSDevice *dev, m_canbusDevice) {
+                    dev->dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(dev->name),&errorString);
+                    connect(dev->dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
+                    connect(dev->dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
+                    dev->dev->connectDevice();
+                    dev->connected = true;
+                }
+//                QCanBusDevice *dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(d.name()),&errorString);
+//                connect(dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
+//                connect(dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
+//                dev->connectDevice();
+//                m_canbusDevices.append(dev);
+
+            }
+            else{
+                m_simulator = true;
             }
         }
-        else{
-            qDebug()<<"No valid device found";
-            m_simulator = true;
-        }
+//        if(m_canbusDevInfo.size() == 0){
+//            // try to launch canbus device
+//            QProcess *proc = new QProcess();
+//            proc->execute("ip link set can0 up type can bitrate 250000");
+//            proc->waitForFinished();
+//            proc->execute("ip link set can1 up type can bitrate 250000");
+//            proc->waitForFinished();
+//            m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
+//        }
+//        if(m_canbusDevInfo.size() > 0){
+//            m_canbusDevices.clear();
+//            foreach(QCanBusDeviceInfo d, m_canbusDevInfo){
+//                qDebug()<<d.name();
+//                QCanBusDevice *dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(d.name()),&errorString);
+//                connect(dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
+//                connect(dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
+//                dev->connectDevice();
+//                m_canbusDevices.append(dev);
+//            }
+//        }
+//        else{
+//            qDebug()<<"No valid device found";
+//            m_simulator = true;
+//        }
         if(m_simulator){
             m_bmsSystem->startSimulator(1000);
             mTimer = new QTimer();
@@ -197,8 +218,8 @@ void BMS_Controller::handleNewConnection()
 void BMS_Controller::OnCanBusError(QCanBusDevice::CanBusError error)
 {
     QCanBusDevice *dev = (QCanBusDevice*)sender();
-    foreach(QCanBusDevice *d, m_canbusDevices){
-        if(d == dev){
+    foreach(CANBUSDevice *d, m_canbusDevice){
+        if(d->dev == dev){
             qDebug()<<"Canbus Error:";
         }
     }
@@ -207,10 +228,10 @@ void BMS_Controller::OnCanBusError(QCanBusDevice::CanBusError error)
 void BMS_Controller::OnCanbusReceived()
 {
     QCanBusDevice *dev = (QCanBusDevice*)sender();
-    foreach(QCanBusDevice *d, m_canbusDevices){
-        if(d == dev){
-            while(dev->framesAvailable()){
-                QCanBusFrame f= dev->readFrame();
+    foreach(CANBUSDevice *d, m_canbusDevice){
+        if(d->dev == dev){
+            while(d->dev->framesAvailable()){
+                QCanBusFrame f= d->dev->readFrame();
                 //qDebug()<<"Frame Received:";
                 if(f.frameType() == QCanBusFrame::DataFrame){
                     m_bmsSystem->feedData(f.frameId(),f.payload());
@@ -255,7 +276,7 @@ bool BMS_Controller::loadConfig()
             this->m_modbusDev->bitrate = o["bitrate"].toInt();
             this->m_modbusDev->portName = o["port"].toString();
         }
-
+        return true;
     }
     else{
         qDebug()<<"No Configuration available";

@@ -43,7 +43,7 @@ public:
     void stopServer();
     void startCANHandler(QString device);
     void stopCANHandler(QString device);
-    void loadConfig();
+    bool loadConfig();
 
 signals:
 
@@ -64,7 +64,7 @@ private:
     bool m_simulator = false;
     BMS_SystemInfo *m_bmsSystem = nullptr;
     QTimer *mTimer;
-    QList<QCanBusDevice*> m_canbusDevices;
+    //QList<QCanBusDevice*> m_canbusDevices;
     QList<QString> m_devices;
     QList<QCanBusDeviceInfo> m_canbusDevInfo;
     QList<CANBUSDevice*> m_canbusDevice;
