@@ -33,6 +33,7 @@ public:
 };
 
 
+static QMap<QString, int> cmd_map{{"READ",0},{"DO",1},{"VO",2}};
 class BMS_Controller : public QObject
 {
     Q_OBJECT

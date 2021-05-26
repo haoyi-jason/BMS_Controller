@@ -43,14 +43,18 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 // start can device
                 QString cmd;
                 QProcess *proc = new QProcess();
+
                 foreach (CANBUSDevice *dev, m_canbusDevice) {
                     cmd = QString("ip link set %1 down").arg(dev->name);
-                    proc->execute(cmd);
+                    proc->start("sh",QStringList()<<"-c"<<cmd);
                     proc->waitForFinished();
+                    qDebug()<<"Proc Result:"<<proc->readAll();
                     cmd = QString("ip link set %1 up type can bitrate %2").arg(dev->name).arg(dev->bitrate);
-                    proc->execute(cmd);
+                    proc->start("sh",QStringList()<<"-c"<<cmd);
                     proc->waitForFinished();
+                    qDebug()<<"Proc Result:"<<proc->readAll();
                 }
+                proc->close();
             }
             // check if device count match config
             // load canbus device
@@ -168,6 +172,47 @@ void BMS_Controller::handleSocketDataReceived()
                 }
             }
         }
+        // parse string
+        QStringList sl = str.split(":");
+        if(sl.size() > 1){
+            switch(cmd_map.value(sl[0])){
+            case 0:
+                if(sl[1].compare("CONFIG",Qt::CaseInsensitive)==0){
+                    qDebug()<<"Read Config:";
+                    QFile f("config/local.json");
+                    if(f.exists() && f.open(QIODevice::ReadOnly)){
+                        qDebug()<<"Reply config";
+                        QByteArray b = f.readAll();
+                        f.close();
+                        b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
+                        s->write(b);
+                        foreach (RemoteSystem *sys, m_clients) {
+                            if(sys->socket == s){
+                                sys->configReady = true;
+                            }
+                        }
+                    }
+                }
+                break;
+            case 1:
+                if(sl.size()==3){
+                   int ch = sl[1].toInt();
+                   int value = sl[2].toInt()==0?0:1;
+                   this->m_bmsSystem->setDigitalOut(ch,value);
+                   this->m_bmsSystem->flushBCU();
+                }
+                break;
+            case 2:
+                if(sl.size() == 3){
+                    int ch = sl[1].toInt();
+                    int value = sl[2].toInt();
+                    this->m_bmsSystem->setVoltageSource(ch,value);
+                    this->m_bmsSystem->flushBCU();
+                }
+                break;
+            }
+        }
+
     }
 
 }
