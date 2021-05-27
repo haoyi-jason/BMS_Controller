@@ -75,47 +75,17 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     dev->dev->connectDevice();
                     dev->connected = true;
                 }
-//                QCanBusDevice *dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(d.name()),&errorString);
-//                connect(dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
-//                connect(dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
-//                dev->connectDevice();
-//                m_canbusDevices.append(dev);
-
             }
             else{
                 m_simulator = true;
             }
         }
-//        if(m_canbusDevInfo.size() == 0){
-//            // try to launch canbus device
-//            QProcess *proc = new QProcess();
-//            proc->execute("ip link set can0 up type can bitrate 250000");
-//            proc->waitForFinished();
-//            proc->execute("ip link set can1 up type can bitrate 250000");
-//            proc->waitForFinished();
-//            m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
-//        }
-//        if(m_canbusDevInfo.size() > 0){
-//            m_canbusDevices.clear();
-//            foreach(QCanBusDeviceInfo d, m_canbusDevInfo){
-//                qDebug()<<d.name();
-//                QCanBusDevice *dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(d.name()),&errorString);
-//                connect(dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
-//                connect(dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
-//                dev->connectDevice();
-//                m_canbusDevices.append(dev);
-//            }
-//        }
-//        else{
-//            qDebug()<<"No valid device found";
-//            m_simulator = true;
-//        }
         if(m_simulator){
             m_bmsSystem->startSimulator(1000);
-            mTimer = new QTimer();
-            connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
-            mTimer->start(2000);
         }
+        mTimer = new QTimer();
+        connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
+        mTimer->start(2000);
     }
 }
 
@@ -198,16 +168,46 @@ void BMS_Controller::handleSocketDataReceived()
                 if(sl.size()==3){
                    int ch = sl[1].toInt();
                    int value = sl[2].toInt()==0?0:1;
-                   this->m_bmsSystem->setDigitalOut(ch,value);
-                   this->m_bmsSystem->flushBCU();
+                   CAN_Packet *p = this->m_bmsSystem->setDigitalOut(ch,value);
+                   if(p != nullptr){
+                       QCanBusFrame frame;
+                       quint32 id = p->Command | (0x01 << 12);
+                       frame.setFrameId(id);
+                       frame.setPayload(p->data);
+                       frame.setFrameType(QCanBusFrame::DataFrame);
+                       if(m_canbusDevice.size()>0){
+                           if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                               qDebug()<<"Write frame OK";
+                           }
+                           else{
+                               qDebug()<<"Write frame Fail";
+                           }
+                       }
+
+                   }
+                   //this->m_bmsSystem->flushBCU();
                 }
                 break;
             case 2:
                 if(sl.size() == 3){
                     int ch = sl[1].toInt();
                     int value = sl[2].toInt();
-                    this->m_bmsSystem->setVoltageSource(ch,value);
-                    this->m_bmsSystem->flushBCU();
+                    CAN_Packet *p = this->m_bmsSystem->setVoltageSource(ch,value,value!=0);
+                    if(p != nullptr){
+                        QCanBusFrame frame;
+                        quint32 id = p->Command | (0x01 << 12);
+                        frame.setFrameId(id);
+                        frame.setPayload(p->data);
+                        frame.setFrameType(QCanBusFrame::DataFrame);
+                        if(m_canbusDevice.size()>0){
+                            if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                qDebug()<<"Write frame OK";
+                            }
+                            else{
+                                qDebug()<<"Write frame Fail";
+                            }
+                        }
+                    }
                 }
                 break;
             }
