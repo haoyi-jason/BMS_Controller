@@ -37,7 +37,7 @@ public:
 
 
 static QMap<QString, int> cmd_map{{"READ",0},{"DO",1},{"VO",2},{"PORT",3},{"BCU",4}};
-static QMap<QString, int> bcu_cmd_map{{"DO",0},{"VO",1},{"AIMAP",2}};
+static QMap<QString, int> bcu_cmd_map{{"DO",0},{"VO",1},{"AIMAP",2},{"SAVE",3}};
 class BMS_Controller : public QObject
 {
     Q_OBJECT

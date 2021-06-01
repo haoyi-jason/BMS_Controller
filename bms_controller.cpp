@@ -336,6 +336,22 @@ void BMS_Controller::handleSocketDataReceived()
                         }
                     }
                     break;
+                case 3: // Save param
+                    CAN_Packet *p = this->m_bmsSystem->bcu()->saveParam();
+                    QCanBusFrame frame;
+                    quint32 id = p->Command | (0x01 << 12);;
+                    frame.setFrameId(id);
+                    frame.setPayload(p->data);
+                    frame.setFrameType(QCanBusFrame::DataFrame);
+                    if(m_canbusDevice.size()>0){
+                        if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                            qDebug()<<"Write frame OK";
+                        }
+                        else{
+                            qDebug()<<"Write frame Fail";
+                        }
+                    }
+                    break;
                 }
 
                 break;
