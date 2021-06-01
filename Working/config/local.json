@@ -1,6 +1,7 @@
 {
   "alias":"Alias",
-  "host_ip":"192.168.0.1",
+  "host_ip":"192.168.0.102",
+  "port":5001,
   "report":{
     "normal":1000,
     "error":100

@@ -6,5 +6,8 @@
   "mbslave":{
 	"port":"/dev/ttymxc0",
 	"bitrate":115200  
+  },
+  "config":{
+	"log_path":"./log"
   }
 }

@@ -6,6 +6,9 @@ int main(int argc, char *argv[])
     QCoreApplication a(argc, argv);
 
     BMS_Controller *c = new BMS_Controller();
-    c->startServer("192.168.0.126",5001);
+    if(!c->startServer()){
+
+        return -1;
+    }
     return a.exec();
 }

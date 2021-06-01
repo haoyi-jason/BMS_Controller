@@ -12,6 +12,10 @@
 #include<QJsonArray>
 #include "../BMS_HY01/bms_def.h"
 #include "../BMS_HY01/secs.h"
+#include <QtSerialPort/QSerialPort>
+#include <QModbusRtuSerialSlave>
+
+
 
 BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 {
@@ -20,7 +24,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
     m_server = new QTcpServer(this);
 
-    m_bmsSystem = new BMS_SystemInfo();
+    m_bmsSystem = new BMS_System();
 
 
     // load from file
@@ -79,6 +83,18 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             else{
                 m_simulator = true;
             }
+
+            // start MODBUS Slave
+            m_modbusDev->dev = new QModbusRtuSerialSlave();
+            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
+            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
+            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
+            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
+            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
+
+            if(m_modbusDev->dev->connectDevice()){
+                m_modbusDev->connected = true;
+            }
         }
         if(m_simulator){
             m_bmsSystem->startSimulator(1000);
@@ -89,13 +105,16 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     }
 }
 
-bool BMS_Controller::startServer(QString ipAddress, int port)
+bool BMS_Controller::startServer()
 {
-    m_server->listen(QHostAddress(ipAddress),port);
+//    m_server->listen(QHostAddress(ipAddress),port);
+    m_server->listen(QHostAddress(m_bmsSystem->connectionString),m_bmsSystem->connectionPort);
     if(m_server->isListening()){
         connect(m_server,&QTcpServer::newConnection,this,&BMS_Controller::handleNewConnection);
+        log("Server Start Successfully\n");
         return true;
     }
+    log("Server Start Fail!\n");
     return false;
 }
 
@@ -210,7 +229,132 @@ void BMS_Controller::handleSocketDataReceived()
                     }
                 }
                 break;
+            case 3: // port
+                if(sl[1] == "OPEN"){
+                    m_serialPort = new QSerialPort();
+                    m_serialPort->setPortName(sl[2]);
+                    m_serialPort->setBaudRate(sl[3].toInt());
+                    if(!m_serialPort->open(QIODevice::ReadWrite)){
+                        m_serialPort->close();
+                        m_serialPort->deleteLater();
+                        m_serialPort = nullptr;
+                    }
+                    else{
+                        connect(m_serialPort,&QSerialPort::readyRead,this,&BMS_Controller::OnSerialCanRead);
+                    }
+                }
+                else if(sl[1] == "CLOSE")
+                {
+                    if(m_serialPort->isOpen()){
+                        m_serialPort->close();
+                        m_serialPort->deleteLater();
+                        m_serialPort = nullptr;
+                    }
+                }
+                else if(sl[1] == "WRITE")
+                {
+                    if(m_serialPort->isOpen()){
+                        m_serialPort->write(sl[2].toUtf8());
+                    }
+                }
+                break;
+            case 4: // BCU
+                if(sl.size()<2) return;
+                if(this->m_bmsSystem->bcu() == nullptr) return;
+                switch(bcu_cmd_map.value(sl[1])){
+                case 0: // DO
+                    if(sl.size() == 4){
+                        CAN_Packet *p = this->m_bmsSystem->bcu()->setDigitalOut(sl[2].toInt(),sl[3].toInt()==0?0:1);
+                        if(p != nullptr){
+                            QCanBusFrame frame;
+                            quint32 id = p->Command | (0x01 << 12);
+                            frame.setFrameId(id);
+                            frame.setPayload(p->data);
+                            frame.setFrameType(QCanBusFrame::DataFrame);
+                            if(m_canbusDevice.size()>0){
+                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                    qDebug()<<"Write frame OK";
+                                }
+                                else{
+                                    qDebug()<<"Write frame Fail";
+                                }
+                            }
+
+                        }
+                    }
+                    break;
+                case 1: // VO
+                    if(sl.size() == 4){
+                        CAN_Packet *p = this->m_bmsSystem->bcu()->setVoltageSource(sl[2].toInt(),sl[3].toInt(),sl[3].toInt()!=0);
+                        if(p != nullptr){
+                            QCanBusFrame frame;
+                            quint32 id = p->Command | (0x01 << 12);
+                            frame.setFrameId(id);
+                            frame.setPayload(p->data);
+                            frame.setFrameType(QCanBusFrame::DataFrame);
+                            if(m_canbusDevice.size()>0){
+                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                    qDebug()<<"Write frame OK";
+                                }
+                                else{
+                                    qDebug()<<"Write frame Fail";
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case 2: // AIMAP
+                    if(sl.size() < 5) return;
+                    CAN_Packet *p = nullptr;
+                    switch(sl[3].toInt()){
+                    case 0: // raw low
+                        p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
+                        break;
+                    case 1: // raw high
+                        p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
+                        break;
+                    case 2: // eng low
+                        p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
+                        break;
+                    case 3: // eng high
+                        p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                        break;
+                    }
+                    if(p != nullptr){
+                        QCanBusFrame frame;
+                        quint32 id = p->Command | (0x01 << 12);
+                        frame.setFrameId(id);
+                        frame.setPayload(p->data);
+                        frame.setFrameType(QCanBusFrame::DataFrame);
+                        if(m_canbusDevice.size()>0){
+                            if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                qDebug()<<"Write frame OK";
+                            }
+                            else{
+                                qDebug()<<"Write frame Fail";
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                break;
             }
+        }
+
+    }
+
+}
+
+void BMS_Controller::OnSerialCanRead()
+{
+    QSerialPort *p = (QSerialPort*)sender();
+    QByteArray b = p->readAll();
+
+    foreach (RemoteSystem *sys, m_clients) {
+        if(sys->socket != nullptr){
+            b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_SERIAL_DATA,b.size()));
+            sys->socket->write(b);
         }
 
     }
@@ -321,11 +465,32 @@ bool BMS_Controller::loadConfig()
             this->m_modbusDev->bitrate = o["bitrate"].toInt();
             this->m_modbusDev->portName = o["port"].toString();
         }
+        if(obj.contains("config")){
+            QJsonObject o = obj["config"].toObject();
+            this->m_logPath = o["log_path"].toString();
+            // check if folder presents
+            if(!QDir(this->m_logPath).exists()){
+                QDir().mkdir(this->m_logPath);
+            }
+        }
         return true;
     }
     else{
         qDebug()<<"No Configuration available";
         return false;
     }
+    return false;
+}
+
+bool BMS_Controller::log(QString message)
+{
+    QString path = this->m_logPath + "/" +"log.txt";
+    QFile f(path);
+    if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
+        f.write(message.toUtf8());
+        f.close();
+        return true;
+    }
+    f.close();
     return false;
 }
