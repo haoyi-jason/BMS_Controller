@@ -165,7 +165,7 @@ void BMS_Controller::handleSocketDataReceived()
         QStringList sl = str.split(":");
         if(sl.size() > 1){
             switch(cmd_map.value(sl[0])){
-            case 0:
+            case 0: // READ
                 if(sl[1].compare("CONFIG",Qt::CaseInsensitive)==0){
                     qDebug()<<"Read Config:";
                     QFile f("config/local.json");
@@ -183,7 +183,7 @@ void BMS_Controller::handleSocketDataReceived()
                     }
                 }
                 break;
-            case 1:
+            case 1:  // DO
                 if(sl.size()==3){
                    int ch = sl[1].toInt();
                    int value = sl[2].toInt()==0?0:1;
@@ -207,7 +207,7 @@ void BMS_Controller::handleSocketDataReceived()
                    //this->m_bmsSystem->flushBCU();
                 }
                 break;
-            case 2:
+            case 2: // AO
                 if(sl.size() == 3){
                     int ch = sl[1].toInt();
                     int value = sl[2].toInt();
@@ -304,39 +304,40 @@ void BMS_Controller::handleSocketDataReceived()
                     }
                     break;
                 case 2: // AIMAP
-                    if(sl.size() < 5) return;
-                    CAN_Packet *p = nullptr;
-                    switch(sl[3].toInt()){
-                    case 0: // raw low
-                        p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
-                        break;
-                    case 1: // raw high
-                        p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
-                        break;
-                    case 2: // eng low
-                        p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
-                        break;
-                    case 3: // eng high
-                        p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
-                        break;
-                    }
-                    if(p != nullptr){
-                        QCanBusFrame frame;
-                        quint32 id = p->Command | (0x01 << 12);
-                        frame.setFrameId(id);
-                        frame.setPayload(p->data);
-                        frame.setFrameType(QCanBusFrame::DataFrame);
-                        if(m_canbusDevice.size()>0){
-                            if(m_canbusDevice[1]->dev->writeFrame(frame)){
-                                qDebug()<<"Write frame OK";
-                            }
-                            else{
-                                qDebug()<<"Write frame Fail";
+                    if(sl.size() == 5){
+                        CAN_Packet *p = nullptr;
+                        switch(sl[3].toInt()){
+                        case 0: // raw low
+                            p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
+                            break;
+                        case 1: // raw high
+                            p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
+                            break;
+                        case 2: // eng low
+                            p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
+                            break;
+                        case 3: // eng high
+                            p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                            break;
+                        }
+                        if(p != nullptr){
+                            QCanBusFrame frame;
+                            quint32 id = p->Command | (0x01 << 12);
+                            frame.setFrameId(id);
+                            frame.setPayload(p->data);
+                            frame.setFrameType(QCanBusFrame::DataFrame);
+                            if(m_canbusDevice.size()>0){
+                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                    qDebug()<<"Write frame OK";
+                                }
+                                else{
+                                    qDebug()<<"Write frame Fail";
+                                }
                             }
                         }
                     }
                     break;
-                case 3: // Save param
+                case 3: {// Save param
                     CAN_Packet *p = this->m_bmsSystem->bcu()->saveParam();
                     QCanBusFrame frame;
                     quint32 id = p->Command | (0x01 << 12);;
@@ -350,6 +351,7 @@ void BMS_Controller::handleSocketDataReceived()
                         else{
                             qDebug()<<"Write frame Fail";
                         }
+                }
                     }
                     break;
                 }
