@@ -10,10 +10,15 @@
 #include<QJsonObject>
 #include<QJsonValue>
 #include<QJsonArray>
-#include "../BMS_HY01/bms_def.h"
-#include "../BMS_HY01/secs.h"
 #include <QtSerialPort/QSerialPort>
 #include <QModbusRtuSerialSlave>
+#include "../BMS_HY01/bms_def.h"
+#include "../BMS_HY01/secs.h"
+#include "../BMS_HY01/bms_bmudevice.h"
+#include "../BMS_HY01/bms_bcudevice.h"
+#include "../BMS_HY01/bms_svidevice.h"
+#include "../BMS_HY01/bms_stack.h"
+#include "../BMS_HY01/bms_system.h"
 
 
 
