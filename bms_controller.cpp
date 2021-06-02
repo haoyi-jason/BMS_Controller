@@ -20,7 +20,7 @@
 #include "../BMS_HY01/bms_stack.h"
 #include "../BMS_HY01/bms_system.h"
 
-
+#include <QDateTime>
 
 BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 {
@@ -33,7 +33,8 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
 
     // load from file
-    QString path = "config/local.json";
+    QString path = QCoreApplication::applicationDirPath()+"/config/local.json";
+    qDebug()<<"Current Path:"<<path;
 
     QFile f(path);
     bool success = false;
@@ -42,7 +43,8 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
         f.close();
     }
     else{
-        qDebug()<<"No Configuration available";
+        log(QString("File local.json not exist"));
+        qDebug()<<"No Configuration available 1"<<f.exists();
     }
 
     if(success){
@@ -71,6 +73,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
 
             if(!errorString.isEmpty()){
+                log(QString("CANBUS Error: %1").arg(errorString));
                 qDebug()<<errorString;
             }
             qDebug()<<"Device found:"<<m_canbusDevInfo.size();
@@ -84,6 +87,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     dev->dev->connectDevice();
                     dev->connected = true;
                 }
+                this->m_connected = true;
             }
             else{
                 m_simulator = true;
@@ -106,13 +110,12 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
         }
         mTimer = new QTimer();
         connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
-        mTimer->start(2000);
+        mTimer->start(1000);
     }
 }
 
 bool BMS_Controller::startServer()
 {
-//    m_server->listen(QHostAddress(ipAddress),port);
     m_server->listen(QHostAddress(m_bmsSystem->connectionString),m_bmsSystem->connectionPort);
     if(m_server->isListening()){
         connect(m_server,&QTcpServer::newConnection,this,&BMS_Controller::handleNewConnection);
@@ -126,6 +129,7 @@ bool BMS_Controller::startServer()
 void BMS_Controller::stopServer()
 {
     m_server->close();
+    log("Server Stopped\n");
 }
 
 void BMS_Controller::startCANHandler(QString device)
@@ -141,18 +145,13 @@ void BMS_Controller::stopCANHandler(QString device)
 void BMS_Controller::handleSocketDataReceived()
 {
     QTcpSocket *s = (QTcpSocket*)sender();
-    // echo server
-//    if(s->bytesAvailable()){
-//        QByteArray b = s->readAll();
-//        s->write("ECHO:");
-//        s->write(b);
-//    }
 
     if(s->bytesAvailable()){
         QString str = QString(s->readAll());
         if(str == "READ:CFG"){
             qDebug()<<"Read Config:";
-            QFile f("config/local.json");
+            QString path = QCoreApplication::applicationDirPath()+"/config/local.json";
+            QFile f(path);
             if(f.exists() && f.open(QIODevice::ReadOnly)){
                 qDebug()<<"Reply config";
                 QByteArray b = f.readAll();
@@ -456,7 +455,8 @@ void BMS_Controller::OnCanbusReceived()
 bool BMS_Controller::loadConfig()
 {
     // load from file
-    QString path = "config/interface.json";
+//    QString path = "config/interface.json";
+    QString path = QCoreApplication::applicationDirPath()+"/config/interface.json";
     QFile f(path);
     bool success = false;
     if(f.exists() && f.open(QIODevice::ReadOnly)){
@@ -490,7 +490,7 @@ bool BMS_Controller::loadConfig()
         }
         if(obj.contains("config")){
             QJsonObject o = obj["config"].toObject();
-            this->m_logPath = o["log_path"].toString();
+            this->m_logPath = QCoreApplication::applicationDirPath()+o["log_path"].toString();
             // check if folder presents
             if(!QDir(this->m_logPath).exists()){
                 QDir().mkdir(this->m_logPath);
@@ -499,7 +499,7 @@ bool BMS_Controller::loadConfig()
         return true;
     }
     else{
-        qDebug()<<"No Configuration available";
+        qDebug()<<"No Configuration available 2";
         return false;
     }
     return false;
@@ -509,11 +509,22 @@ bool BMS_Controller::log(QString message)
 {
     QString path = this->m_logPath + "/" +"log.txt";
     QFile f(path);
+    QString msg = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss :") +message;
     if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
-        f.write(message.toUtf8());
+        f.write(msg.toUtf8());
         f.close();
         return true;
     }
     f.close();
     return false;
+}
+
+bool BMS_Controller::isConnected()
+{
+    return m_connected;
+}
+
+bool BMS_Controller::isSimulating()
+{
+    return m_simulator;
 }

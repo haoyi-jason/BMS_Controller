@@ -50,7 +50,8 @@ public:
     void stopCANHandler(QString device);
     bool loadConfig();
     bool log(QString message);
-
+    bool isConnected();
+    bool isSimulating();
 signals:
 
 public slots:
@@ -77,6 +78,7 @@ private:
     MODBUSDevice *m_modbusDev = nullptr;
     QSerialPort *m_serialPort= nullptr;
     QString m_logPath = "./log";
+    bool m_connected=false;
 };
 
 #endif // BMS_CONTROLLER_H
