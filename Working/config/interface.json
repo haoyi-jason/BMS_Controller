@@ -9,5 +9,6 @@
   },
   "config":{
 	"log_path":"./log"
-  }
+  },
+  "simulate":true
 }

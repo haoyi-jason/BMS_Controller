@@ -63,6 +63,9 @@ public slots:
     void OnCanbusReceived();
     void OnSerialCanRead();
 
+private:
+    void prepareModbusRegister();
+    void updateModbusRegister();
 
 private:
     QTcpServer *m_server = nullptr;

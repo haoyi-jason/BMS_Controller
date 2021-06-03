@@ -21,6 +21,7 @@
 #include "../BMS_HY01/bms_system.h"
 
 #include <QDateTime>
+#include <QSysInfo>
 
 BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 {
@@ -33,7 +34,14 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
 
     // load from file
-    QString path = QCoreApplication::applicationDirPath()+"/config/local.json";
+    QString path;
+
+    if(QSysInfo::productType().contains("win")){
+        path = "./config/local.json";
+    }
+    else{
+       path = QCoreApplication::applicationDirPath()+"/config/local.json";
+    }
     qDebug()<<"Current Path:"<<path;
 
     QFile f(path);
@@ -50,47 +58,51 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     if(success){
         // load local interface configuration
         if(this->loadConfig()){
-            if(this->m_canbusDevice.count()>0){
-                // start can device
-                QString cmd;
-                QProcess *proc = new QProcess();
-
-                foreach (CANBUSDevice *dev, m_canbusDevice) {
-                    cmd = QString("ip link set %1 down").arg(dev->name);
-                    proc->start("sh",QStringList()<<"-c"<<cmd);
-                    proc->waitForFinished();
-                    qDebug()<<"Proc Result:"<<proc->readAll();
-                    cmd = QString("ip link set %1 up type can bitrate %2").arg(dev->name).arg(dev->bitrate);
-                    proc->start("sh",QStringList()<<"-c"<<cmd);
-                    proc->waitForFinished();
-                    qDebug()<<"Proc Result:"<<proc->readAll();
-                }
-                proc->close();
-            }
-            // check if device count match config
-            // load canbus device
-            QString errorString;
-            m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
-
-            if(!errorString.isEmpty()){
-                log(QString("CANBUS Error: %1").arg(errorString));
-                qDebug()<<errorString;
-            }
-            qDebug()<<"Device found:"<<m_canbusDevInfo.size();
-            if(m_canbusDevInfo.size() == m_canbusDevice.size()){
-                m_simulator = false;
-                // start can device and register handler
-                foreach (CANBUSDevice *dev, m_canbusDevice) {
-                    dev->dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(dev->name),&errorString);
-                    connect(dev->dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
-                    connect(dev->dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
-                    dev->dev->connectDevice();
-                    dev->connected = true;
-                }
+            if(this->isSimulating()){
+                log("Start Simulator");
+                m_bmsSystem->startSimulator(1000);
                 this->m_connected = true;
             }
             else{
-                m_simulator = true;
+                if(this->m_canbusDevice.count()>0){
+                    // start can device
+                    QString cmd;
+                    QProcess *proc = new QProcess();
+
+                    foreach (CANBUSDevice *dev, m_canbusDevice) {
+                        cmd = QString("ip link set %1 down").arg(dev->name);
+                        proc->start("sh",QStringList()<<"-c"<<cmd);
+                        proc->waitForFinished();
+                        qDebug()<<"Proc Result:"<<proc->readAll();
+                        cmd = QString("ip link set %1 up type can bitrate %2").arg(dev->name).arg(dev->bitrate);
+                        proc->start("sh",QStringList()<<"-c"<<cmd);
+                        proc->waitForFinished();
+                        qDebug()<<"Proc Result:"<<proc->readAll();
+                    }
+                    proc->close();
+                }
+                // check if device count match config
+                // load canbus device
+                QString errorString;
+                m_canbusDevInfo = QCanBus::instance()->availableDevices(QStringLiteral("socketcan"),&errorString);
+
+                if(!errorString.isEmpty()){
+                    log(QString("CANBUS Error: %1").arg(errorString));
+                    qDebug()<<errorString;
+                }
+                qDebug()<<"Device found:"<<m_canbusDevInfo.size();
+                if(m_canbusDevInfo.size() == m_canbusDevice.size()){
+                    m_simulator = false;
+                    // start can device and register handler
+                    foreach (CANBUSDevice *dev, m_canbusDevice) {
+                        dev->dev = QCanBus::instance()->createDevice(QStringLiteral("socketcan"),QString(dev->name),&errorString);
+                        connect(dev->dev,&QCanBusDevice::errorOccurred,this,&BMS_Controller::OnCanBusError);
+                        connect(dev->dev,&QCanBusDevice::framesReceived,this,&BMS_Controller::OnCanbusReceived);
+                        dev->dev->connectDevice();
+                        dev->connected = true;
+                    }
+                    this->m_connected = true;
+                }
             }
 
             // start MODBUS Slave
@@ -104,9 +116,6 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             if(m_modbusDev->dev->connectDevice()){
                 m_modbusDev->connected = true;
             }
-        }
-        if(m_simulator){
-            m_bmsSystem->startSimulator(1000);
         }
         mTimer = new QTimer();
         connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
@@ -150,7 +159,13 @@ void BMS_Controller::handleSocketDataReceived()
         QString str = QString(s->readAll());
         if(str == "READ:CFG"){
             qDebug()<<"Read Config:";
-            QString path = QCoreApplication::applicationDirPath()+"/config/local.json";
+            QString path;
+            if(QSysInfo::productType().contains("win")){
+                path = "./config/local.json";
+            }
+            else{
+                path = QCoreApplication::applicationDirPath()+"/config/local.json";
+            }
             QFile f(path);
             if(f.exists() && f.open(QIODevice::ReadOnly)){
                 qDebug()<<"Reply config";
@@ -407,6 +422,8 @@ void BMS_Controller::handleTimeout()
             sys->socket->write(b);
         }
     }
+
+    updateModbusRegister();
 }
 
 void BMS_Controller::handleNewConnection()
@@ -455,8 +472,13 @@ void BMS_Controller::OnCanbusReceived()
 bool BMS_Controller::loadConfig()
 {
     // load from file
-//    QString path = "config/interface.json";
-    QString path = QCoreApplication::applicationDirPath()+"/config/interface.json";
+    QString path;
+    if(QSysInfo::productType().contains("win")){
+        path = "./config/interface.json";
+    }
+    else{
+        path = QCoreApplication::applicationDirPath()+"/config/interface.json";
+    }
     QFile f(path);
     bool success = false;
     if(f.exists() && f.open(QIODevice::ReadOnly)){
@@ -490,11 +512,19 @@ bool BMS_Controller::loadConfig()
         }
         if(obj.contains("config")){
             QJsonObject o = obj["config"].toObject();
-            this->m_logPath = QCoreApplication::applicationDirPath()+o["log_path"].toString();
+            if(QSysInfo::productType().contains("win")){
+                this->m_logPath = o["log_path"].toString();
+            }
+            else{
+                this->m_logPath = QCoreApplication::applicationDirPath()+o["log_path"].toString();
+            }
             // check if folder presents
             if(!QDir(this->m_logPath).exists()){
                 QDir().mkdir(this->m_logPath);
             }
+        }
+        if(obj.contains("simulate")){
+            this->m_simulator = obj["simulate"].toBool();
         }
         return true;
     }
@@ -527,4 +557,50 @@ bool BMS_Controller::isConnected()
 bool BMS_Controller::isSimulating()
 {
     return m_simulator;
+}
+
+void BMS_Controller::prepareModbusRegister()
+{
+    QModbusDataUnitMap reg;
+    reg.insert(QModbusDataUnit::HoldingRegisters,{QModbusDataUnit::HoldingRegisters,0,8000});
+    m_modbusDev->dev->setMap(reg);
+
+    // update static variable
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,0,m_bmsSystem->Stacks);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1,m_bmsSystem->batteriesPerStack().at(0));
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,8);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
+}
+
+void BMS_Controller::updateModbusRegister()
+{
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,4,m_bmsSystem->stacks().at(0)->stackVoltage());
+
+    for(int i=0;i<7;i++){
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,6+i,100);
+    }
+
+    int offset = 13;
+    ushort csum = 0;
+    int stack = 0;
+    foreach (BMS_StackInfo *s, m_bmsSystem->stacks()) {
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,offset++,s->stackCurrent());
+        csum += s->stackCurrent();
+
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack,s->maxCellVoltage());
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 1,s->minCellVoltage());
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 2,s->maxStackTemperature());
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 3,s->minStackTemperature());
+
+        int oo = 4;
+        foreach (BMS_BMUDevice *b, s->batteries()) {
+            for(int i=0;i<b->cellCount();i++){
+                m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + oo++,b->cellVoltage(i));
+            }
+            for(int i=0;i<b->ntcCount();i++){
+                m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + oo++,b->packTemperature(i));
+            }
+        }
+    }
+
 }
