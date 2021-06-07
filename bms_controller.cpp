@@ -370,11 +370,47 @@ void BMS_Controller::handleSocketDataReceived()
                         else{
                             qDebug()<<"Write frame Fail";
                         }
-                }
+                    }
                     }
                     break;
                 }
-
+                break;
+            case 5: // SVI
+                // only AIMAP supported now (210605)
+                if(sl.size() == 5){
+                    CAN_Packet *p = nullptr;
+                    switch(sl[3].toInt()){
+                    case 0: // raw low
+                        p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
+                        break;
+                    case 1: // raw high
+                        p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
+                        break;
+                    case 2: // eng low
+                        p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
+                        break;
+                    case 3: // eng high
+                        p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                        break;
+                    }
+                    if(p != nullptr){
+                        QCanBusFrame frame;
+                        quint32 id = p->Command | (0x1F << 12); // SVI ID always = 0x1F (31D)
+                        frame.setFrameId(id);
+                        frame.setPayload(p->data);
+                        frame.setFrameType(QCanBusFrame::DataFrame);
+                        if(m_canbusDevice.size()>0){
+                            if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                qDebug()<<"Write frame OK";
+                            }
+                            else{
+                                qDebug()<<"Write frame Fail";
+                            }
+                        }
+                    }
+                }
+                break;
+            case 6: // BMU
                 break;
             }
         }
