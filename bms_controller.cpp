@@ -115,6 +115,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
             if(m_modbusDev->dev->connectDevice()){
                 m_modbusDev->connected = true;
+                prepareModbusRegister();
             }
         }
         mTimer = new QTimer();
