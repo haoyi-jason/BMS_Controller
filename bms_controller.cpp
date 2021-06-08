@@ -412,6 +412,27 @@ void BMS_Controller::handleSocketDataReceived()
                 }
                 break;
             case 6: // BMU
+                if(sl.size() == 7){ // enable/disable
+                    quint16 bv = (ushort)sl[2].toInt();
+                    quint8 hv = (quint8)sl[3].toInt();
+                    quint8 ev = (quint8)sl[4].toInt();
+                    quint16 on =(quint16)sl[5].toInt();
+                    quint16 off =(quint16)sl[6].toInt();
+                    CAN_Packet *p = this->m_bmsSystem->setBalancing(bv,hv,ev,on,off);
+                    QCanBusFrame frame;
+                    quint32 id = p->Command; // broadcasting
+                    frame.setFrameId(id);
+                    frame.setPayload(p->data);
+                    frame.setFrameType(QCanBusFrame::DataFrame);
+                    foreach(CANBUSDevice *dev, m_canbusDevice){
+                        if(dev->dev->writeFrame(frame)){
+                            qDebug()<<"Frame Write OK";
+                        }
+                        else{
+                            qDebug()<<"Frame Write Fail";
+                        }
+                    }
+                }
                 break;
             }
         }
@@ -454,6 +475,7 @@ void BMS_Controller::handleTimeout()
     QDataStream d(&b,QIODevice::ReadWrite);
     d << m_bmsSystem;
     b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_STACK,b.size()));
+    updateModbusRegister();
     foreach (RemoteSystem *sys, m_clients) {
         if(sys->configReady){
             sys->socket->write(b);
