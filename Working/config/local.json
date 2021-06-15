@@ -2,6 +2,11 @@
   "alias":"Alias",
   "host_ip":"127.0.0.1",
   "port":5001,
+  "valid_interval":1,
+  "enable_log":false,
+  "log_path": "log",
+  "log_days":-1,
+  "log_records":200,
   "report":{
     "normal":1000,
     "error":100
@@ -44,5 +49,87 @@
 		"unit":["ma","ma"],
 		"limit":[3000,3000]
 	}
+  },
+  "criteria":{
+	  "cell":{
+		  "volt-warning":{
+			  "high_set":3750,
+			  "high_clr":3650,
+			  "low_set":2700,
+			  "low_clr":3000,
+			  "diff_set":200,
+			  "diff_clr":50,
+			  "duration":3
+		  },
+		  "volt-alarm":{
+			  "high_set":3900,
+			  "high_clr":3650,
+			  "low_set":2500,
+			  "low_clr":3000,
+			  "diff_set":250,
+			  "diff_clr":50,
+			  "duration":3
+		  },
+		  "temp-warning":{
+			  "high_set":60,
+			  "high_clr":55,
+			  "low_set":15,
+			  "low_clr":20,
+			  "duration":3
+		  },
+		  "temp-alarm":{
+			  "high_set":70,
+			  "high_clr":55,
+			  "low_set":10,
+			  "low_clr":20,
+			  "duration":3
+		  }
+	  },
+	  "stack":{
+		  "volt-warning":{
+			  "high_set":135,
+			  "high_clr":131.4,
+			  "low_set":97.2,
+			  "low_clr":108,
+			  "duration":3
+		  },
+		  "volt-alarm":{
+			  "high_set":140.4,
+			  "high_clr":131.4,
+			  "low_set":90,
+			  "low_clr":108,
+			  "duration":3
+		  },
+		  "current-warning":{
+			  "high_set":75,
+			  "high_clr":50,
+			  "low_set":400,
+			  "low_clr":50,
+			  "duration":3
+		  },
+		  "current-alarm":{
+			  "high_set":100,
+			  "high_clr":50,
+			  "low_set":450,
+			  "low_clr":50,
+			  "duration":3
+		  }
+	  },
+	  "soc":{
+		  "warning":{
+			  "low_set":10,
+			  "low_res":15
+		  },
+		  "alarm":{
+			  "low_set":5,
+			  "low_res":15
+		  }
+	  }
+  },
+  "event_output":{
+	  "warning_out":0,
+	  "alarm_out":1,
+	  "warning_latch":true,
+	  "alarm_latch":true
   }
 }

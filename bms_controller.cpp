@@ -117,11 +117,15 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 m_modbusDev->connected = true;
                 prepareModbusRegister();
             }
+            mTimer = new QTimer();
+            connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
+            mTimer->start(1000);
+
+            m_bmsSystem->enableAlarmSystem(true);
         }
-        mTimer = new QTimer();
-        connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
-        mTimer->start(1000);
     }
+
+  //  m_bmsSystem->On_BMU_ov(0x10);
 }
 
 bool BMS_Controller::startServer()
@@ -185,21 +189,23 @@ void BMS_Controller::handleSocketDataReceived()
         QStringList sl = str.split(":");
         if(sl.size() > 1){
             switch(cmd_map.value(sl[0])){
-            case 0: // READ
-                if(sl[1].compare("CONFIG",Qt::CaseInsensitive)==0){
-                    qDebug()<<"Read Config:";
-                    QFile f("config/local.json");
-                    if(f.exists() && f.open(QIODevice::ReadOnly)){
-                        qDebug()<<"Reply config";
-                        QByteArray b = f.readAll();
-                        f.close();
-                        b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
-                        s->write(b);
-                        foreach (RemoteSystem *sys, m_clients) {
-                            if(sys->socket == s){
-                                sys->configReady = true;
-                            }
+            case 0: // SYS
+                if(sl[1].compare("CFG",Qt::CaseInsensitive)==0){
+                    foreach (RemoteSystem *sys, m_clients) {
+                        if(sys->socket == s){
+                            sys->configReady = true;
                         }
+                    }
+                }
+                else if(sl[1].compare("ALMRST",Qt::CaseInsensitive) == 0){
+                    m_bmsSystem->clearAlarm();
+                    if(m_bmsSystem->bcu()->digitalOutState(0)==1){
+                        CAN_Packet *p = nullptr;
+                        if((p = m_bmsSystem->setDigitalOut(0,0)) != nullptr){
+                            p->Command |= (0x01 << 12); // bcudevice
+                            this->writeFrame(p);
+                        }
+
                     }
                 }
                 break;
@@ -434,6 +440,34 @@ void BMS_Controller::handleSocketDataReceived()
                     }
                 }
                 break;
+            case 7: // SIM
+                switch(sim_cmd_map.value(sl[1])){
+                case 0: // SIM:CV:BID:CID:V
+                    if(sl.size() == 5){
+                        foreach(BMS_Stack *s, m_bmsSystem->stacks()){
+                            quint8 id = (quint8)sl[2].toInt();
+                            if(s->groupID() == GROUP_OF(id) ){
+                                s->setSimCellData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
+                            }
+                        }
+                    }
+                    break;
+                case 1: // // SIM:CT:BID:CID:V
+                    if(sl.size() == 5){
+                        foreach(BMS_Stack *s, m_bmsSystem->stacks()){
+                            quint8 id = (quint8)sl[2].toInt();
+                            if(s->groupID() == GROUP_OF(id) ){
+                                s->setSimTempData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
+                            }
+                        }
+                    }
+                    break;
+                case 2: // SV
+                    break;
+                case 3: // SA
+                    break;
+                }
+                break;
             }
         }
 
@@ -474,15 +508,33 @@ void BMS_Controller::handleTimeout()
     QByteArray b;
     QDataStream d(&b,QIODevice::ReadWrite);
     d << m_bmsSystem;
+    m_bmsSystem->log(b);
+    updateModbusRegister();
+
     b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_STACK,b.size()));
     updateModbusRegister();
+    if(m_bmsSystem->alarmState() != 0){
+        // check if bcu's digital output state is set or not
+        if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+            CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
+            p->Command |= (1 <<12);
+            writeFrame(p);
+        }
+    }
+    else if(!m_bmsSystem->warinig_latch()){
+        if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+            CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
+            p->Command |= (1 <<12);
+            writeFrame(p);
+        }
+    }
     foreach (RemoteSystem *sys, m_clients) {
+
         if(sys->configReady){
             sys->socket->write(b);
         }
     }
 
-    updateModbusRegister();
 }
 
 void BMS_Controller::handleNewConnection()
@@ -545,6 +597,7 @@ bool BMS_Controller::loadConfig()
         QJsonDocument d = QJsonDocument::fromJson(f.readAll());
         f.close();
         if(d.isNull()){
+            qDebug()<<"Wrong config file";
             return false;
         }
         QJsonObject obj = d.object();
@@ -642,7 +695,7 @@ void BMS_Controller::updateModbusRegister()
     int offset = 13;
     ushort csum = 0;
     int stack = 0;
-    foreach (BMS_StackInfo *s, m_bmsSystem->stacks()) {
+    foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,offset++,s->stackCurrent());
         csum += s->stackCurrent();
 
@@ -662,4 +715,21 @@ void BMS_Controller::updateModbusRegister()
         }
     }
 
+}
+
+bool BMS_Controller::writeFrame(CAN_Packet *p)
+{
+    if(p == nullptr) return false;
+    QCanBusFrame frame;
+    frame.setFrameId(p->Command);
+    frame.setPayload(p->data);
+    frame.setFrameType(QCanBusFrame::DataFrame);
+    if(m_canbusDevice.size()>0){
+        if(m_canbusDevice[1]->dev->writeFrame(frame)){
+            qDebug()<<"Write frame OK";
+        }
+        else{
+            qDebug()<<"Write frame Fail";
+        }
+    }
 }

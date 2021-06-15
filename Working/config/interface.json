@@ -8,7 +8,7 @@
 	"bitrate":115200  
   },
   "config":{
-	"log_path":"./log"
+	"log_path":"/log"
   },
   "simulate":true
 }
