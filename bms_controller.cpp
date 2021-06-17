@@ -618,7 +618,6 @@ void BMS_Controller::handleStateMachTimeout()
         else if(!m_bmsSystem->warinig_latch()){
             if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
                 CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
-                //p->Command |= (1 <<12);
                 writeFrame(p);
             }
         }
