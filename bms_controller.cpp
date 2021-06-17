@@ -547,6 +547,7 @@ void BMS_Controller::handleStateMachTimeout()
         switch(m_stateMach->subState){
         case 0: // start bcu power
             if(m_bmsSystem->bcu() != nullptr){
+                writeFrame(m_bmsSystem->heartBeat());
                 CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
                 if(writeFrame(p)){
                     m_stateMach->subState++;
@@ -555,12 +556,12 @@ void BMS_Controller::handleStateMachTimeout()
                 else{
                     log("Start BCU Voltage source channel 0 failed");
                 }
-                delete p;
+                //delete p;
             }
             break;
         case 1:
             if(m_bmsSystem->bcu() != nullptr){
-                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(1));
+                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
                 if(writeFrame(p)){
                     m_stateMach->subState = 0;
                     m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
@@ -569,7 +570,7 @@ void BMS_Controller::handleStateMachTimeout()
                 else{
                     log("Start BCU Voltage source channel 1 failed");
                 }
-                delete p;
+                //delete p;
             }
             break;
         }
@@ -586,7 +587,7 @@ void BMS_Controller::handleStateMachTimeout()
             else{
                 log("Start BMU Devices failed");
             }
-            delete p;
+            //delete p;
         }
         break;
     case BMS_StateMachine::STATE_INITIALIZED:
@@ -856,21 +857,31 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
    // m_stateMach->add_packet(p);
 
     QCanBusFrame frame;
-    bool ret = false;
+    bool ret = true;
     frame.setFrameId(p->Command);
     frame.setPayload(p->data);
     frame.setFrameType(p->remote?QCanBusFrame::RemoteRequestFrame:QCanBusFrame::DataFrame);
 
-    if(m_canbusDevice.size()>0){
-        if(m_canbusDevice[1]->dev->writeFrame(frame)){
-            qDebug()<<"Write frame OK";
-            ret = true;
+
+    foreach (CANBUSDevice *d, m_canbusDevice) {
+        if(d->dev->writeFrame(frame)){
+
         }
         else{
-            qDebug()<<"Write frame Fail";
-            ret = false;
+
         }
     }
+//    if(m_canbusDevice.size()>0){
+//        if(m_canbusDevice[1]->dev->writeFrame(frame)){
+//            qDebug()<<"Write frame OK";
+//            ret = true;
+//        }
+//        else{
+//            qDebug()<<"Write frame Fail";
+//            ret = false;
+//        }
+//    }
+    delete p;
     return ret;
 }
 
