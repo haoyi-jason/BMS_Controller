@@ -6,6 +6,8 @@
 #include <QCanBusDeviceInfo>
 #include <QCanBusFrame>
 #include <QProcess>
+#include <QDateTime>
+#include <QSysInfo>
 #include<QJsonDocument>
 #include<QJsonObject>
 #include<QJsonValue>
@@ -20,8 +22,6 @@
 #include "../BMS_HY01/bms_stack.h"
 #include "../BMS_HY01/bms_system.h"
 
-#include <QDateTime>
-#include <QSysInfo>
 
 BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 {
@@ -602,17 +602,24 @@ void BMS_Controller::handleStateMachTimeout()
         }
         else{
             m_stateMach->state = BMS_StateMachine::STATE_NOT_INITIALIZED;
+            m_balancingDelay = 100;
         }
         log("Start State Machine");
         break;
     case BMS_StateMachine::STATE_NOT_INITIALIZED:
-        m_balancingDelay = 100;
         switch(m_stateMach->subState){
-        case 0: // start bcu power
+        case 0:
+            if(m_stateMach->stateDelay > 0)
+                m_stateMach->stateDelay--;
+            if(m_stateMach->stateDelay == 0)
+                m_stateMach->subState = 1;
+            break;
+        case 1: // start bcu power
             if(m_bmsSystem->bcu() != nullptr){
                 CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
                 if(writeFrame(p)){
                     m_stateMach->subState++;
+                    m_stateMach->stateDelay = 10;
                     log("Start BCU Voltage source channel 0 success");
                 }
                 else{
@@ -621,12 +628,19 @@ void BMS_Controller::handleStateMachTimeout()
                 delete p;
             }
             break;
-        case 1:
+        case 2:
+            if(m_stateMach->stateDelay > 0)
+                m_stateMach->stateDelay--;
+            if(m_stateMach->stateDelay == 0)
+                m_stateMach->subState = 3;
+            break;
+        case 3:
             if(m_bmsSystem->bcu() != nullptr){
-                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(1));
+                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
                 if(writeFrame(p)){
                     m_stateMach->subState = 0;
                     m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
+                    m_stateMach->stateDelay = 10;
                     log("Start BCU Voltage source channel 1 success");
                 }
                 else{
@@ -639,17 +653,22 @@ void BMS_Controller::handleStateMachTimeout()
 
         break;
     case BMS_StateMachine::STATE_INITIALIZING:
-        // start bmus
-        if(m_bmsSystem != nullptr){
-            CAN_Packet *p = m_bmsSystem->startBMUs(true);
-            if(writeFrame(p)){
-                m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
-                log("Start BMU Devices success");
+        if(m_stateMach->stateDelay > 0){
+            m_stateMach->stateDelay--;
+        }
+        if(m_stateMach->stateDelay == 0){
+            // start bmus
+            if(m_bmsSystem != nullptr){
+                CAN_Packet *p = m_bmsSystem->startBMUs(true);
+                if(writeFrame(p)){
+                    m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
+                    log("Start BMU Devices success");
+                }
+                else{
+                    log("Start BMU Devices failed");
+                }
+                delete p;
             }
-            else{
-                log("Start BMU Devices failed");
-            }
-            delete p;
         }
         break;
     case BMS_StateMachine::STATE_INITIALIZED:
@@ -669,19 +688,25 @@ void BMS_Controller::handleStateMachTimeout()
             if(writeFrame(p)){
             }
         }
-        if(m_bmsSystem->alarmState() != 0){
-            // check if bcu's digital output state is set or not
-            if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
-                CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
-                //p->Command |= (1 <<12);
-                writeFrame(p);
-            }
+        if(m_ioDelay > 0){
+            m_ioDelay--;
         }
-        else if(!m_bmsSystem->warinig_latch()){
-            if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
-                CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
-                //p->Command |= (1 <<12);
-                writeFrame(p);
+        if(m_ioDelay == 0){
+            m_ioDelay = 10;
+            if(m_bmsSystem->alarmState() != 0){
+                // check if bcu's digital output state is set or not
+                if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
+                    //p->Command |= (1 <<12);
+                    writeFrame(p);
+                }
+            }
+            else if(!m_bmsSystem->warinig_latch()){
+                if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
+                    //p->Command |= (1 <<12);
+                    writeFrame(p);
+                }
             }
         }
 
@@ -850,11 +875,13 @@ bool BMS_Controller::loadConfig()
 
 bool BMS_Controller::log(QString message)
 {
-    QString path = this->m_logPath + "/" +"log.txt";
+
+    QString path =QString("%1/log-%2.txt").arg(this->m_logPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
     QFile f(path);
-    QString msg = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss :") +message;
+//    QString msg = QString("%1:%2").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")).arg(message);
+    QString logText = QString("%1:%2\n").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss:")).arg(message);
     if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
-        f.write(msg.toUtf8());
+        f.write(logText.toUtf8());
         f.close();
         return true;
     }
@@ -936,6 +963,11 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
         frame.setFrameId(p->Command);
         frame.setPayload(p->data);
         frame.setFrameType(p->remote?QCanBusFrame::RemoteRequestFrame:QCanBusFrame::DataFrame);
+        frame.setExtendedFrameFormat(true);
+
+        foreach (CANBUSDevice *c, m_canbusDevice) {
+            c->dev->writeFrame(frame);
+        }
 
         if(m_canbusDevice.size()>0){
             if(m_canbusDevice[1]->dev->writeFrame(frame)){

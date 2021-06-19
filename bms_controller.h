@@ -98,6 +98,7 @@ private:
     int m_broadcastCounter=10;
     int m_heartbeatCounter=10;
     int m_balancingDelay = 10;
+    int m_ioDelay = 10;
 };
 
 
@@ -140,6 +141,7 @@ public:
     int subState=0;
     QList<CAN_Packet*> m_pendPacket;
     CAN_Packet *m_currPacket = nullptr;
+    int stateDelay = 0;
 };
 
 #endif // BMS_CONTROLLER_H
