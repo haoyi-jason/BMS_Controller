@@ -21,7 +21,8 @@
 	"count":5,
 	"baterries_per_stack":20,
 	"cells_per_battery":12,
-	"ntcs_per_stack":5
+	"ntcs_per_stack":5,
+	"capacity":50
   },
   "bcu":{
 	"digital":{
