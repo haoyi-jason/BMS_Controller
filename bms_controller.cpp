@@ -67,6 +67,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             else{
                 if(this->m_canbusDevice.count()>0){
                     // start can device
+                    log("Start Socket CAN Device");
                     QString cmd;
                     QProcess *proc = new QProcess();
 
@@ -74,11 +75,11 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                         cmd = QString("ip link set %1 down").arg(dev->name);
                         proc->start("sh",QStringList()<<"-c"<<cmd);
                         proc->waitForFinished();
-                        qDebug()<<"Proc Result:"<<proc->readAll();
+                        //qDebug()<<"Proc Result:"<<proc->readAll();
                         cmd = QString("ip link set %1 up type can bitrate %2").arg(dev->name).arg(dev->bitrate);
                         proc->start("sh",QStringList()<<"-c"<<cmd);
                         proc->waitForFinished();
-                        qDebug()<<"Proc Result:"<<proc->readAll();
+                        //qDebug()<<"Proc Result:"<<proc->readAll();
                     }
                     proc->close();
                 }
@@ -91,7 +92,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     log(QString("CANBUS Error: %1").arg(errorString));
                     qDebug()<<errorString;
                 }
-                qDebug()<<"Device found:"<<m_canbusDevInfo.size();
+               // qDebug()<<"Device found:"<<m_canbusDevInfo.size();
                 if(m_canbusDevInfo.size() == m_canbusDevice.size()){
                     m_simulator = false;
                     // start can device and register handler
@@ -107,6 +108,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             }
 
             // start MODBUS Slave
+            log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
             m_modbusDev->dev = new QModbusRtuSerialSlave();
             m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
             m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
@@ -117,6 +119,10 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             if(m_modbusDev->dev->connectDevice()){
                 m_modbusDev->connected = true;
                 prepareModbusRegister();
+                log("Modbus RTU Slave start successfully");
+            }
+            else{
+                log("MODBUS RTU Slave start failed");
             }
             mTimer = new QTimer();
             connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
@@ -128,6 +134,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
             m_bmsSystem->enableAlarmSystem(true);
             connect(m_bmsSystem,&BMS_System::setBalancingVoltage,this,&BMS_Controller::setBalancingVoltage);
+            connect(m_bmsSystem,&BMS_System::logMessage,this,&BMS_Controller::log);
         }
     }
 
@@ -136,7 +143,8 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
 bool BMS_Controller::startServer()
 {
-    m_server->listen(QHostAddress(m_bmsSystem->connectionString),m_bmsSystem->connectionPort);
+//    m_server->listen(QHostAddress(m_bmsSystem->connectionString),m_bmsSystem->connectionPort);
+    m_server->listen(QHostAddress::Any,m_bmsSystem->connectionPort);
     if(m_server->isListening()){
         connect(m_server,&QTcpServer::newConnection,this,&BMS_Controller::handleNewConnection);
         log("Server Start Successfully\n");
@@ -196,108 +204,55 @@ void BMS_Controller::handleSocketDataReceived()
         if(sl.size() > 1){
             switch(cmd_map.value(sl[0])){
             case 0: // SYS
-                if(sl[1].compare("CFG",Qt::CaseInsensitive)==0){
+                switch(sys_cmd_map.value(sl[1])){
+                case 0: // SYS:CFG
                     foreach (RemoteSystem *sys, m_clients) {
                         if(sys->socket == s){
                             sys->configReady = true;
                         }
                     }
-                }
-                else if(sl[1].compare("ALMRST",Qt::CaseInsensitive) == 0){
+                    break;
+                case 1: // SYS:ALMRST
                     m_bmsSystem->clearAlarm();
                     if(m_bmsSystem->bcu()->digitalOutState(0)==1){
                         CAN_Packet *p = nullptr;
-                        if((p = m_bmsSystem->setDigitalOut(0,0)) != nullptr){
+                        if((p = m_bmsSystem->bcu()->setDigitalOut(0,0)) != nullptr){
                             p->Command |= (0x01 << 12); // bcudevice
                             this->writeFrame(p);
                         }
 
                     }
-                }
-                else if(sl[1].compare("INIT_TIME",Qt::CaseInsensitive)==0){
-                    qint64 epoch = m_bmsSystem->startTime().toSecsSinceEpoch();
-                    QByteArray b;
-                    QDataStream ds(&b,QIODevice::WriteOnly);
-                    ds << epoch;
-                    b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_SYS_DATETIME,b.size()));
-                    s->write(b);
+                    break;
+                case 2: // SYS:INIT_TIME:
+                    break;
+                case 3: // SYS:CFGFR , read config file
+                    {
+                    QString path;
+                    if(QSysInfo::productType().contains("win")){
+                        path = "./config/local.json";
+                    }
+                    else{
+                        path = QCoreApplication::applicationDirPath()+"/config/local.json";
+                    }
+                    QFile f(path);
+                    if(f.exists() && f.open(QIODevice::ReadOnly)){
+                        QByteArray b = f.readAll();
+                        f.close();
+                        b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
+                        s->write(b);
+                        foreach (RemoteSystem *sys, m_clients) {
+                            if(sys->socket == s){
+                                sys->configReady = true;
+                            }
+                        }
+                    }
+                    }
+                    break;
+                case 4: // SYS:CFGFW
+
+                    break;
                 }
                 break;
-//            case 1:  // DO
-//                if(sl.size()==3){
-//                   int ch = sl[1].toInt();
-//                   int value = sl[2].toInt()==0?0:1;
-//                   CAN_Packet *p = this->m_bmsSystem->setDigitalOut(ch,value);
-//                   if(p != nullptr){
-//                       QCanBusFrame frame;
-//                       quint32 id = p->Command | (0x01 << 12);
-//                       frame.setFrameId(id);
-//                       frame.setPayload(p->data);
-//                       frame.setFrameType(QCanBusFrame::DataFrame);
-//                       if(m_canbusDevice.size()>0){
-//                           if(m_canbusDevice[1]->dev->writeFrame(frame)){
-//                               qDebug()<<"Write frame OK";
-//                           }
-//                           else{
-//                               qDebug()<<"Write frame Fail";
-//                           }
-//                       }
-
-//                   }
-//                   //this->m_bmsSystem->flushBCU();
-//                }
-//                break;
-//            case 2: // AO
-//                if(sl.size() == 3){
-//                    int ch = sl[1].toInt();
-//                    int value = sl[2].toInt();
-//                    CAN_Packet *p = this->m_bmsSystem->setVoltageSource(ch,value,value!=0);
-//                    if(p != nullptr){
-//                        QCanBusFrame frame;
-//                        quint32 id = p->Command | (0x01 << 12);
-//                        frame.setFrameId(id);
-//                        frame.setPayload(p->data);
-//                        frame.setFrameType(QCanBusFrame::DataFrame);
-//                        if(m_canbusDevice.size()>0){
-//                            if(m_canbusDevice[1]->dev->writeFrame(frame)){
-//                                qDebug()<<"Write frame OK";
-//                            }
-//                            else{
-//                                qDebug()<<"Write frame Fail";
-//                            }
-//                        }
-//                    }
-//                }
-//                break;
-//            case 3: // port
-//                if(sl[1] == "OPEN"){
-//                    m_serialPort = new QSerialPort();
-//                    m_serialPort->setPortName(sl[2]);
-//                    m_serialPort->setBaudRate(sl[3].toInt());
-//                    if(!m_serialPort->open(QIODevice::ReadWrite)){
-//                        m_serialPort->close();
-//                        m_serialPort->deleteLater();
-//                        m_serialPort = nullptr;
-//                    }
-//                    else{
-//                        connect(m_serialPort,&QSerialPort::readyRead,this,&BMS_Controller::OnSerialCanRead);
-//                    }
-//                }
-//                else if(sl[1] == "CLOSE")
-//                {
-//                    if(m_serialPort->isOpen()){
-//                        m_serialPort->close();
-//                        m_serialPort->deleteLater();
-//                        m_serialPort = nullptr;
-//                    }
-//                }
-//                else if(sl[1] == "WRITE")
-//                {
-//                    if(m_serialPort->isOpen()){
-//                        m_serialPort->write(sl[2].toUtf8());
-//                    }
-//                }
-//                break;
             case 4: // BCU
                 if(sl.size()<2) return;
                 if(this->m_bmsSystem->bcu() == nullptr) return;
@@ -574,7 +529,7 @@ void BMS_Controller::handleTimeout()
         QByteArray b;
         QDataStream d(&b,QIODevice::ReadWrite);
         d << m_bmsSystem;
-        m_bmsSystem->log(b);
+        m_bmsSystem->rec_log(b);
         updateModbusRegister();
         b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_STACK,b.size()));
         foreach (RemoteSystem *sys, m_clients) {
@@ -714,6 +669,7 @@ void BMS_Controller::handleStateMachTimeout()
             m_balancingDelay--;
         }else{
             writeFrame(m_bmsSystem->broadcastBalancing());
+            m_balancingDelay = 50;
         }
 
         if(m_stateMach->pendState != BMS_StateMachine::STATE_NONE){
@@ -873,7 +829,7 @@ bool BMS_Controller::loadConfig()
     return false;
 }
 
-bool BMS_Controller::log(QString message)
+void BMS_Controller::log(QString message)
 {
 
     QString path =QString("%1/log-%2.txt").arg(this->m_logPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
@@ -883,10 +839,10 @@ bool BMS_Controller::log(QString message)
     if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
         f.write(logText.toUtf8());
         f.close();
-        return true;
+        //return true;
     }
     f.close();
-    return false;
+    //return false;
 }
 
 bool BMS_Controller::isConnected()

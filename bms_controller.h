@@ -42,7 +42,7 @@ static QMap<QString, int> bcu_cmd_map{{"DO",0},{"VO",1},{"AIMAP",2},{"SAVE",3}};
 static QMap<QString, int> svi_cmd_map{{"AIMAP",0},{"SOHT",1},{"SSOC",2}};
 static QMap<QString, int> bmu_cmd_map{{"BV",0},{"BE",1}};
 static QMap<QString, int> sim_cmd_map{{"CV",0},{"CT",1},{"SV",2},{"SA",3},{"SSOC",4}};
-
+static QMap<QString, int> sys_cmd_map{{"CFG",0},{"ALMRST",1},{"INIT_TIME",2},{"CFGFR",3},{"CFGFW",4}};
 class BMS_Controller : public QObject
 {
     Q_OBJECT
@@ -54,7 +54,6 @@ public:
     void startCANHandler(QString device);
     void stopCANHandler(QString device);
     bool loadConfig();
-    bool log(QString message);
     bool isConnected();
     bool isSimulating();
     void terminate();
@@ -69,6 +68,7 @@ public slots:
     void OnCanBusError(QCanBusDevice::CanBusError error);
     void OnCanbusReceived();
     void OnSerialCanRead();
+    void log(QString message);
 
 private slots:
     void setBalancingVoltage(ushort v);
@@ -97,7 +97,7 @@ private:
     BMS_StateMachine *m_stateMach = nullptr;
     int m_broadcastCounter=10;
     int m_heartbeatCounter=10;
-    int m_balancingDelay = 10;
+    int m_balancingDelay = 50; // every 5 seconds
     int m_ioDelay = 10;
 };
 
