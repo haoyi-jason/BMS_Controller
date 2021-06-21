@@ -3,7 +3,7 @@
   "host_ip":"127.0.0.1",
   "port":5001,
   "valid_interval":1,
-  "enable_log":false,
+  "enable_log":true,
   "log_path": "log",
   "log_days":-1,
   "log_records":200,
@@ -18,8 +18,8 @@
     "off_time":30
   },
   "stack":{
-	"count":5,
-	"baterries_per_stack":20,
+	"count":2,
+	"baterries_per_stack":3,
 	"cells_per_battery":12,
 	"ntcs_per_stack":5,
 	"capacity":50
@@ -88,24 +88,24 @@
 	  },
 	  "stack":{
 		  "volt-warning":{
-			  "high_set":135,
+			  "high_set":135.0,
 			  "high_clr":131.4,
 			  "low_set":97.2,
-			  "low_clr":108,
+			  "low_clr":108.0,
 			  "duration":3
 		  },
 		  "volt-alarm":{
 			  "high_set":140.4,
 			  "high_clr":131.4,
-			  "low_set":90,
-			  "low_clr":108,
+			  "low_set":90.0,
+			  "low_clr":108.0,
 			  "duration":3
 		  },
 		  "current-warning":{
-			  "high_set":75,
-			  "high_clr":50,
+			  "high_set":750,
+			  "high_clr":500,
 			  "low_set":400,
-			  "low_clr":50,
+			  "low_clr":500,
 			  "duration":3
 		  },
 		  "current-alarm":{

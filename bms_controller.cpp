@@ -133,7 +133,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             mStateTimer->start(100);
 
             m_bmsSystem->enableAlarmSystem(true);
-            connect(m_bmsSystem,&BMS_System::setBalancingVoltage,this,&BMS_Controller::setBalancingVoltage);
+            //connect(m_bmsSystem,&BMS_System::setBalancingVoltage,this,&BMS_Controller::setBalancingVoltage);
             connect(m_bmsSystem,&BMS_System::logMessage,this,&BMS_Controller::log);
         }
     }
