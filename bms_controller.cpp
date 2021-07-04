@@ -38,18 +38,21 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     QString path;
 
     if(QSysInfo::productType().contains("win")){
-        path = "./config/local.json";
+        //path = "./config/local.json";
+        path="d:/temp/bms/config/controller.json";
     }
     else{
-       path = QCoreApplication::applicationDirPath()+"/config/local.json";
+       //path = QCoreApplication::applicationDirPath()+"/config/local.json";
+        path = "/opt/bms/config/controller.json"; //-- change after Jul. 21'
     }
     qDebug()<<"Current Path:"<<path;
 
     QFile f(path);
     bool success = false;
-    if(f.exists() && f.open(QIODevice::ReadOnly)){
-        success = m_bmsSystem->Configuration(f.readAll());
-        f.close();
+    if(f.exists()){
+        //success = m_bmsSystem->Configuration(f.readAll());
+        success = m_bmsSystem->Configuration2(path);
+        //f.close();
     }
     else{
         log(QString("File local.json not exist"));
@@ -172,33 +175,10 @@ void BMS_Controller::stopCANHandler(QString device)
 
 void BMS_Controller::handleSocketDataReceived()
 {
-    QTcpSocket *s = (QTcpSocket*)sender();
+    QTcpSocket *s = static_cast<QTcpSocket*>(sender());
 
     if(s->bytesAvailable()){
         QString str = QString(s->readAll());
-//        if(str == "READ:CFG"){
-//            qDebug()<<"Read Config:";
-//            QString path;
-//            if(QSysInfo::productType().contains("win")){
-//                path = "./config/local.json";
-//            }
-//            else{
-//                path = QCoreApplication::applicationDirPath()+"/config/local.json";
-//            }
-//            QFile f(path);
-//            if(f.exists() && f.open(QIODevice::ReadOnly)){
-//                qDebug()<<"Reply config";
-//                QByteArray b = f.readAll();
-//                f.close();
-//                b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
-//                s->write(b);
-//                foreach (RemoteSystem *sys, m_clients) {
-//                    if(sys->socket == s){
-//                        sys->configReady = true;
-//                    }
-//                }
-//            }
-//        }
         // parse string
         QStringList sl = str.split(":");
         if(sl.size() > 1){
@@ -222,6 +202,14 @@ void BMS_Controller::handleSocketDataReceived()
                         }
 
                     }
+                    if(m_bmsSystem->bcu()->digitalOutState(1)==1){
+                        CAN_Packet *p = nullptr;
+                        if((p = m_bmsSystem->bcu()->setDigitalOut(1,0)) != nullptr){
+                            p->Command |= (0x01 << 12); // bcudevice
+                            this->writeFrame(p);
+                        }
+
+                    }
                     break;
                 case 2: // SYS:INIT_TIME:
                     break;
@@ -229,10 +217,12 @@ void BMS_Controller::handleSocketDataReceived()
                     {
                     QString path;
                     if(QSysInfo::productType().contains("win")){
-                        path = "./config/local.json";
+                        //path = "./config/local.json";
+                        path="d:/temp/bms/config/controller.json";
                     }
                     else{
-                        path = QCoreApplication::applicationDirPath()+"/config/local.json";
+//                        path = QCoreApplication::applicationDirPath()+"/config/local.json";
+                        path = "/opt/bms/config/controller.json"; //-- change after Jul. 21'
                     }
                     QFile f(path);
                     if(f.exists() && f.open(QIODevice::ReadOnly)){
@@ -390,8 +380,8 @@ void BMS_Controller::handleSocketDataReceived()
                 case 1: // SVI:SOHT:1/0, tracking soh
                     if(sl.size()==3){
                         bool en = (sl[2].toInt()==1);
-                        foreach (BMS_Stack *s, this->m_bmsSystem->stacks()) {
-                            s->sviDevice()->setSOHTracking(en);
+                        foreach (BMS_Stack *st, this->m_bmsSystem->stacks()) {
+                            st->sviDevice()->setSOHTracking(en);
                         }
                     }
                     break;
@@ -399,9 +389,9 @@ void BMS_Controller::handleSocketDataReceived()
                     if(sl.size() == 4){
                         quint8 id = (quint8)sl[2].toInt();
                         float soc = sl[3].toFloat();
-                        foreach (BMS_Stack *s, this->m_bmsSystem->stacks()) {
-                            if(s->groupID() == GROUP_OF(id)){
-                                s->sviDevice()->soc(soc);
+                        foreach (BMS_Stack *st, this->m_bmsSystem->stacks()) {
+                            if(st->groupID() == GROUP_OF(id)){
+                                st->sviDevice()->soc(soc);
                             }
                         }
                     }
@@ -435,54 +425,62 @@ void BMS_Controller::handleSocketDataReceived()
                 switch(sim_cmd_map.value(sl[1])){
                 case 0: // SIM:CV:BID:CID:V
                     if(sl.size() == 5){
-                        foreach(BMS_Stack *s, m_bmsSystem->stacks()){
+                        foreach(BMS_Stack *st, m_bmsSystem->stacks()){
                             quint8 id = (quint8)sl[2].toInt();
-                            if(s->groupID() == GROUP_OF(id) ){
-                                s->setSimCellData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
+                            if(st->groupID() == GROUP_OF(id) ){
+                                st->setSimCellData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
                             }
                         }
                     }
                     break;
                 case 1: // // SIM:CT:BID:CID:V
                     if(sl.size() == 5){
-                        foreach(BMS_Stack *s, m_bmsSystem->stacks()){
+                        foreach(BMS_Stack *st, m_bmsSystem->stacks()){
                             quint8 id = (quint8)sl[2].toInt();
-                            if(s->groupID() == GROUP_OF(id) ){
-                                s->setSimTempData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
+                            if(st->groupID() == GROUP_OF(id) ){
+                                st->setSimTempData((quint8)sl[2].toInt(),(quint8)sl[3].toInt(),(quint16)sl[4].toInt());
                             }
                         }
                     }
                     break;
                 case 2: // SIM:SV:GID:V, simulate stack voltage
                     if(sl.size() == 4){
-                        foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
+                        foreach (BMS_Stack *st, m_bmsSystem->stacks()) {
                             quint8 id = (quint8)sl[2].toInt();
-                            if(s->groupID() == (id)){
-                                s->sviDevice()->setSimVoltage(sl[3].toInt());
+                            if(st->groupID() == (id)){
+                                st->sviDevice()->setSimVoltage(sl[3].toInt());
                             }
                         }
                     }
                     break;
                 case 3: // SIM:SA:GID:V, simulate stack current
                     if(sl.size() == 4){
-                        foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
+                        foreach (BMS_Stack *st, m_bmsSystem->stacks()) {
                             quint8 id = (quint8)sl[2].toInt();
-                            if(s->groupID() == (id)){
-                                s->sviDevice()->setSimAmpere(sl[3].toInt());
+                            if(st->groupID() == (id)){
+                                st->sviDevice()->setSimAmpere(sl[3].toInt());
                             }
                         }
                     }
                     break;
                 case 4: // SIM_SSOC:GID:V, simlate stack soc
                     if(sl.size() == 4){
-                        foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
+                        foreach (BMS_Stack *st, m_bmsSystem->stacks()) {
                             quint8 id = (quint8)sl[2].toInt();
-                            if(s->groupID() == (id)){
-                                s->sviDevice()->setSimSOC(sl[3].toInt());
+                            if(st->groupID() == (id)){
+                                st->sviDevice()->setSimSOC(sl[3].toInt());
                             }
                         }
                     }
                     break;
+                case 5: // SIM:RST
+                    foreach (BMS_Stack *st, m_bmsSystem->stacks()) {
+                        st->sviDevice()->setSimSOC(0);
+                        st->sviDevice()->setSimVoltage(0);
+                        st->sviDevice()->setSimAmpere(0);
+                        st->setSimCellData(0xff,0,0);
+                        st->setSimTempData(0xff,0,0);
+                    }
                 }
                 break;
             }
@@ -494,7 +492,7 @@ void BMS_Controller::handleSocketDataReceived()
 
 void BMS_Controller::OnSerialCanRead()
 {
-    QSerialPort *p = (QSerialPort*)sender();
+    QSerialPort *p = static_cast<QSerialPort*>(sender());
     QByteArray b = p->readAll();
 
     foreach (RemoteSystem *sys, m_clients) {
@@ -509,7 +507,7 @@ void BMS_Controller::OnSerialCanRead()
 
 void BMS_Controller::handleDisconnection()
 {
-    QTcpSocket *s = (QTcpSocket*)sender();
+    QTcpSocket *s = static_cast<QTcpSocket*>(sender());
     foreach (RemoteSystem *sys, m_clients) {
         if(sys->socket == s){
             m_clients.removeOne(sys);
@@ -529,7 +527,8 @@ void BMS_Controller::handleTimeout()
         QByteArray b;
         QDataStream d(&b,QIODevice::ReadWrite);
         d << m_bmsSystem;
-        m_bmsSystem->rec_log(b);
+        //m_bmsSystem->rec_log(b);
+        //m_bmss
         updateModbusRegister();
         b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_STACK,b.size()));
         foreach (RemoteSystem *sys, m_clients) {
@@ -648,17 +647,34 @@ void BMS_Controller::handleStateMachTimeout()
         }
         if(m_ioDelay == 0){
             m_ioDelay = 10;
-            if(m_bmsSystem->alarmState() != 0){
+            quint16 alarm = m_bmsSystem->alarmState();
+            // warning @ low 16-bit
+            if((alarm & 0xFFFF) != 0){
                 // check if bcu's digital output state is set or not
-                if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 0){
                     CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
                     //p->Command |= (1 <<12);
                     writeFrame(p);
                 }
             }
             else if(!m_bmsSystem->warinig_latch()){
-                if(m_bmsSystem->bcu()->digitalOutState(0) == 0){
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 0){
                     CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
+                    //p->Command |= (1 <<12);
+                    writeFrame(p);
+                }
+            }
+            if((alarm & 0xffff0000) != 0){
+                // check if bcu's digital output state is set or not
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()) == 0){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->alarm_out_id(),1);
+                    //p->Command |= (1 <<12);
+                    writeFrame(p);
+                }
+            }
+            else if(!m_bmsSystem->alarm_latch()){
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()) == 0){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->alarm_out_id(),0);
                     //p->Command |= (1 <<12);
                     writeFrame(p);
                 }
@@ -767,10 +783,12 @@ bool BMS_Controller::loadConfig()
     // load from file
     QString path;
     if(QSysInfo::productType().contains("win")){
-        path = "./config/interface.json";
+        //path = "./config/interface.json";
+        path = "d:/temp/bms/config/interface.json";
     }
     else{
-        path = QCoreApplication::applicationDirPath()+"/config/interface.json";
+//        path = QCoreApplication::applicationDirPath()+"/config/interface.json";
+        path="/opt/bms/config/interface.json";
     }
     QFile f(path);
     bool success = false;
@@ -864,26 +882,24 @@ void BMS_Controller::prepareModbusRegister()
     // update static variable
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,0,m_bmsSystem->Stacks);
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1,m_bmsSystem->batteriesPerStack().at(0));
-    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,8);
-    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
+    //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,8);
+    //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,m_bmsSystem->stacks().at(0)->batteries().at(0)->cellCount());
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,m_bmsSystem->stacks().at(0)->batteries().at(0)->ntcCount());
 }
 
 void BMS_Controller::updateModbusRegister()
 {
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,4,m_bmsSystem->stacks().at(0)->stackVoltage());
 
-    for(int i=0;i<7;i++){
-        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,6+i,100);
-    }
-
     int offset = 13;
-    ushort csum = 0;
-    int stack = 0;
+    short csum = 0;
+    int stack = 1;
     foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,offset++,s->stackCurrent());
         csum += s->stackCurrent();
 
-        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack,s->maxCellVoltage());
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack    ,s->maxCellVoltage());
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 1,s->minCellVoltage());
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 2,s->maxStackTemperature());
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 3,s->minStackTemperature());
@@ -897,7 +913,28 @@ void BMS_Controller::updateModbusRegister()
                 m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + oo++,b->packTemperature(i));
             }
         }
+        // SOC
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,stack+5, s->soc());
+
+        // warning /alarm
+        quint32 alarmState = s->alarmState();
+        short err = 0;
+        if((alarmState & 0x0F) != 0x00){
+            err += 1;
+        }
+
+        if((alarmState & 0x30 ) != 0x00){
+            err += 2;
+        }
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,100 + (stack-1)*2,err);
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,101 + (stack-1)*2,err);
+        stack++;
     }
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,5,csum);
+
+    // digital output state
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,33,m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()));
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,34,m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()));
 
 }
 

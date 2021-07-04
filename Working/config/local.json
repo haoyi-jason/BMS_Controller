@@ -53,80 +53,92 @@
   },
   "criteria":{
 	  "cell":{
-		  "volt-warning":{
-			  "high_set":3750,
-			  "high_clr":3650,
-			  "low_set":2700,
-			  "low_clr":3000,
-			  "diff_set":200,
-			  "diff_clr":50,
-			  "duration":3
-		  },
-		  "volt-alarm":{
-			  "high_set":3900,
-			  "high_clr":3650,
-			  "low_set":2500,
-			  "low_clr":3000,
-			  "diff_set":250,
-			  "diff_clr":50,
-			  "duration":3
-		  },
-		  "temp-warning":{
-			  "high_set":60,
-			  "high_clr":55,
-			  "low_set":15,
-			  "low_clr":20,
-			  "duration":3
-		  },
-		  "temp-alarm":{
-			  "high_set":70,
-			  "high_clr":55,
-			  "low_set":10,
-			  "low_clr":20,
-			  "duration":3
-		  }
+            "temp-alarm": {
+                "duration": "5",
+                "high_clr": "40",
+                "high_set": "60",
+                "low_clr": "20",
+                "low_set": "10"
+            },
+            "temp-warning": {
+                "duration": "5",
+                "high_clr": "40",
+                "high_set": "50",
+                "low_clr": "25",
+                "low_set": "20"
+            },
+            "volt-alarm": {
+                "duration": "5",
+                "high_clr": "3.6",
+                "high_set": "3.9",
+                "low_clr": "3.0",
+                "low_set": "2.8"
+            },
+            "volt-warning": {
+                "duration": "5",
+                "high_clr": "3.6",
+                "high_set": "3.8",
+                "low_clr": "3.2",
+                "low_set": "3.0"
+            }
 	  },
 	  "stack":{
-		  "volt-warning":{
-			  "high_set":135.0,
-			  "high_clr":131.4,
-			  "low_set":97.2,
-			  "low_clr":108.0,
-			  "duration":3
-		  },
-		  "volt-alarm":{
-			  "high_set":140.4,
-			  "high_clr":131.4,
-			  "low_set":90.0,
-			  "low_clr":108.0,
-			  "duration":3
-		  },
-		  "current-warning":{
-			  "high_set":750,
-			  "high_clr":500,
-			  "low_set":400,
-			  "low_clr":500,
-			  "duration":3
-		  },
-		  "current-alarm":{
-			  "high_set":100,
-			  "high_clr":50,
-			  "low_set":450,
-			  "low_clr":50,
-			  "duration":3
-		  }
+            "temp-alarm": {
+                "duration": "",
+                "high_clr": "",
+                "high_set": "",
+                "low_clr": "",
+                "low_set": ""
+            },
+            "temp-warning": {
+                "duration": "",
+                "high_clr": "",
+                "high_set": "",
+                "low_clr": "",
+                "low_set": ""
+            },
+            "volt-alarm": {
+                "duration": "5",
+                "high_clr": "130",
+                "high_set": "140",
+                "low_clr": "80",
+                "low_set": "70"
+            },
+            "volt-warning": {
+                "duration": "5",
+                "high_clr": "130",
+                "high_set": "135",
+                "low_clr": "90",
+                "low_set": "80"
+            }
 	  },
 	  "soc":{
-		  "warning":{
-			  "low_set":10,
-			  "low_res":15
-		  },
-		  "alarm":{
-			  "low_set":5,
-			  "low_res":15
-		  }
+            "alarm": {
+                "duration": "",
+                "high_clr": "",
+                "high_set": "",
+                "low_clr": "15",
+                "low_set": "20"
+            },
+            "warning": {
+                "duration": "",
+                "high_clr": "0",
+                "high_set": "0",
+                "low_clr": "",
+                "low_set": ""
+            }
 	  }
   },
+      "modbus": {
+        "bitrate": "9600",
+        "enable": true,
+        "enable_tcp": true,
+        "id": "",
+        "parity": "NONE",
+        "port": "/dev/ttymxc3",
+        "tcp_port": ""
+    },
+    "simulate": true,
   "event_output":{
 	  "warning_out":0,
 	  "alarm_out":1,

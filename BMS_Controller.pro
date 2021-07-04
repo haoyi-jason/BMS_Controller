@@ -19,6 +19,7 @@ SOURCES += \
         ../BMS_HY01/bms_bcudevice.cpp \
         ../BMS_HY01/bms_bmudevice.cpp \
         ../BMS_HY01/bms_def.cpp \
+        ../BMS_HY01/bms_localconfig.cpp \
         ../BMS_HY01/bms_stack.cpp \
         ../BMS_HY01/bms_svidevice.cpp \
         ../BMS_HY01/bms_system.cpp \
@@ -35,6 +36,7 @@ HEADERS += \
     ../BMS_HY01/bms_bcudevice.h \
     ../BMS_HY01/bms_bmudevice.h \
     ../BMS_HY01/bms_def.h \
+    ../BMS_HY01/bms_localconfig.h \
     ../BMS_HY01/bms_stack.h \
     ../BMS_HY01/bms_svidevice.h \
     ../BMS_HY01/bms_system.h \
