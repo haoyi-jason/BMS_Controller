@@ -62,7 +62,8 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     if(success){
         // load local interface configuration
         if(this->loadConfig()){
-            if(this->isSimulating()){
+
+            if(m_bmsSystem->isSimulate()){
                 log("Start Simulator");
                 m_bmsSystem->startSimulator(1000);
                 this->m_connected = true;
