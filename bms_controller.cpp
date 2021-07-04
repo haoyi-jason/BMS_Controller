@@ -964,11 +964,11 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
 
         if(m_canbusDevice.size()>0){
             if(m_canbusDevice[1]->dev->writeFrame(frame)){
-                qDebug()<<"Write frame OK";
+                //qDebug()<<"Write frame OK";
                 ret = true;
             }
             else{
-                qDebug()<<"Write frame Fail";
+                //qDebug()<<"Write frame Fail";
                 ret = false;
             }
         }
