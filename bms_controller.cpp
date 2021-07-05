@@ -114,7 +114,12 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             // start MODBUS Slave
             log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
             m_modbusDev->dev = new QModbusRtuSerialSlave();
-            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
+            if(QSysInfo::productType().contains("win")){
+                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,"COM1");
+            }
+            else{
+                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
+            }
             m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
             m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
             m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
@@ -648,7 +653,7 @@ void BMS_Controller::handleStateMachTimeout()
         }
         if(m_ioDelay == 0){
             m_ioDelay = 10;
-            quint16 alarm = m_bmsSystem->alarmState();
+            quint32 alarm = m_bmsSystem->alarmState();
             // warning @ low 16-bit
             if((alarm & 0xFFFF) != 0){
                 // check if bcu's digital output state is set or not
@@ -881,7 +886,7 @@ void BMS_Controller::prepareModbusRegister()
     m_modbusDev->dev->setMap(reg);
 
     // update static variable
-    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,0,m_bmsSystem->Stacks);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,0,m_bmsSystem->stacks().size());
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1,m_bmsSystem->batteriesPerStack().at(0));
     //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,8);
     //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
