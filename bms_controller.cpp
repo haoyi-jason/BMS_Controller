@@ -396,7 +396,7 @@ void BMS_Controller::handleSocketDataReceived()
                         quint8 id = (quint8)sl[2].toInt();
                         float soc = sl[3].toFloat();
                         foreach (BMS_Stack *st, this->m_bmsSystem->stacks()) {
-                            if(st->groupID() == GROUP_OF(id)){
+                            if(st->groupID() == id){
                                 st->sviDevice()->soc(soc);
                             }
                         }
