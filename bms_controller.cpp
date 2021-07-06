@@ -34,6 +34,14 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
     m_stateMach = new BMS_StateMachine;
 
+    // try to mount sd
+    QProcess proc;
+
+    proc.execute("mount /dev/mmcblk1p1 /mnt/t");
+    proc.waitForFinished();
+    log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
+
+
     // load from file
     QString path;
 
@@ -45,7 +53,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
        //path = QCoreApplication::applicationDirPath()+"/config/local.json";
         path = "/opt/bms/config/controller.json"; //-- change after Jul. 21'
     }
-    qDebug()<<"Current Path:"<<path;
+    //qDebug()<<"Current Path:"<<path;
 
     QFile f(path);
     bool success = false;
@@ -112,26 +120,41 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             }
 
             // start MODBUS Slave
-            log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
-            m_modbusDev->dev = new QModbusRtuSerialSlave();
-            if(QSysInfo::productType().contains("win")){
-                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,"COM1");
-            }
-            else{
-                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
-            }
-            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
-            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
-            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
-            m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
+            if(m_bmsSystem->localConfig()->modbus.ConfigReady){
+                this->m_modbusDev = new MODBUSDevice();
+                this->m_modbusDev->bitrate = m_bmsSystem->localConfig()->modbus.Bitrate.toInt();
+                this->m_modbusDev->portName = m_bmsSystem->localConfig()->modbus.Port;
+                log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
+                m_modbusDev->dev = new QModbusRtuSerialSlave();
+                if(QSysInfo::productType().contains("win")){
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,"COM1");
+                }
+                else{
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
+                }
+                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
+                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
+                QString parity = m_bmsSystem->localConfig()->modbus.Parity;
+                if(parity == "EVEN"){
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::EvenParity);
+                }
+                else if(parity == "ODD"){
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::OddParity);
+                }
+                else{
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
+                }
 
-            if(m_modbusDev->dev->connectDevice()){
-                m_modbusDev->connected = true;
-                prepareModbusRegister();
-                log("Modbus RTU Slave start successfully");
-            }
-            else{
-                log("MODBUS RTU Slave start failed");
+                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
+
+                if(m_modbusDev->dev->connectDevice()){
+                    m_modbusDev->connected = true;
+                    prepareModbusRegister();
+                    log("Modbus RTU Slave start successfully");
+                }
+                else{
+                    log("MODBUS RTU Slave start failed");
+                }
             }
             mTimer = new QTimer();
             connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
@@ -822,28 +845,28 @@ bool BMS_Controller::loadConfig()
             }
         }
 
-        if(obj.contains("mbslave")){
-            QJsonObject o = obj["mbslave"].toObject();
-            this->m_modbusDev = new MODBUSDevice();
-            this->m_modbusDev->bitrate = o["bitrate"].toInt();
-            this->m_modbusDev->portName = o["port"].toString();
-        }
-        if(obj.contains("config")){
-            QJsonObject o = obj["config"].toObject();
-            if(QSysInfo::productType().contains("win")){
-                this->m_logPath = o["log_path"].toString();
-            }
-            else{
-                this->m_logPath = QCoreApplication::applicationDirPath()+o["log_path"].toString();
-            }
-            // check if folder presents
-            if(!QDir(this->m_logPath).exists()){
-                QDir().mkdir(this->m_logPath);
-            }
-        }
-        if(obj.contains("simulate")){
-            this->m_simulator = obj["simulate"].toBool();
-        }
+//        if(obj.contains("mbslave")){
+//            QJsonObject o = obj["mbslave"].toObject();
+//            this->m_modbusDev = new MODBUSDevice();
+//            this->m_modbusDev->bitrate = o["bitrate"].toInt();
+//            this->m_modbusDev->portName = o["port"].toString();
+//        }
+//        if(obj.contains("config")){
+//            QJsonObject o = obj["config"].toObject();
+//            if(QSysInfo::productType().contains("win")){
+//                this->m_logPath = o["log_path"].toString();
+//            }
+//            else{
+//                this->m_logPath = QCoreApplication::applicationDirPath()+o["log_path"].toString();
+//            }
+//            // check if folder presents
+//            if(!QDir(this->m_logPath).exists()){
+//                QDir().mkdir(this->m_logPath);
+//            }
+//        }
+//        if(obj.contains("simulate")){
+//            this->m_simulator = obj["simulate"].toBool();
+//        }
         return true;
     }
     else{
@@ -856,16 +879,15 @@ bool BMS_Controller::loadConfig()
 void BMS_Controller::log(QString message)
 {
 
-    QString path =QString("%1/log-%2.txt").arg(this->m_logPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
+    QString path =QString("%1/sys/log-%2.txt").arg(this->m_bmsSystem->localConfig()->record.LogPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
     QFile f(path);
-//    QString msg = QString("%1:%2").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")).arg(message);
     QString logText = QString("%1:%2\n").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss:")).arg(message);
     if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
         f.write(logText.toUtf8());
         f.close();
         //return true;
     }
-    f.close();
+    //f.close();
     //return false;
 }
 
