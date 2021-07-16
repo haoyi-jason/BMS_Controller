@@ -34,12 +34,6 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
     m_stateMach = new BMS_StateMachine;
 
-    // try to mount sd
-    QProcess proc;
-
-    proc.execute("mount /dev/mmcblk1p1 /mnt/t");
-    proc.waitForFinished();
-    log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
 
 
     // load from file
@@ -52,6 +46,12 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     else{
        //path = QCoreApplication::applicationDirPath()+"/config/local.json";
         path = "/opt/bms/config/controller.json"; //-- change after Jul. 21'
+        // try to mount sd
+        QProcess proc;
+
+        proc.execute("mount /dev/mmcblk1p1 /mnt/t");
+        proc.waitForFinished();
+        log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
     }
     //qDebug()<<"Current Path:"<<path;
 
@@ -575,6 +575,11 @@ void BMS_Controller::handleTimeout()
 
 }
 
+/**
+ * @brief BMS_Controller::handleStateMachTimeout
+ * Description: this function called every 100 ms
+ */
+
 void BMS_Controller::handleStateMachTimeout()
 {
     switch(m_stateMach->state){
@@ -598,17 +603,23 @@ void BMS_Controller::handleStateMachTimeout()
                 m_stateMach->subState = 1;
             break;
         case 1: // start bcu power
-            if(m_bmsSystem->bcu() != nullptr){
-                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
-                if(writeFrame(p)){
-                    m_stateMach->subState++;
-                    m_stateMach->stateDelay = 10;
-                    log("Start BCU Voltage source channel 0 success");
+            if(m_bmsSystem->isSimulate()){
+                m_stateMach->subState++;
+                m_stateMach->stateDelay = 10;
+            }
+            else{
+                if(m_bmsSystem->bcu() != nullptr){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
+                    if(writeFrame(p)){
+                        m_stateMach->subState++;
+                        m_stateMach->stateDelay = 10;
+                        log("Start BCU Voltage source channel 0 success");
+                    }
+                    else{
+                        log("Start BCU Voltage source channel 0 failed");
+                    }
+                    delete p;
                 }
-                else{
-                    log("Start BCU Voltage source channel 0 failed");
-                }
-                delete p;
             }
             break;
         case 2:
@@ -618,18 +629,25 @@ void BMS_Controller::handleStateMachTimeout()
                 m_stateMach->subState = 3;
             break;
         case 3:
-            if(m_bmsSystem->bcu() != nullptr){
-                CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
-                if(writeFrame(p)){
-                    m_stateMach->subState = 0;
-                    m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
-                    m_stateMach->stateDelay = 10;
-                    log("Start BCU Voltage source channel 1 success");
+            if(m_bmsSystem->isSimulate()){
+                m_stateMach->subState = 0;
+                m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
+                m_stateMach->stateDelay = 10;
+            }
+            else{
+                if(m_bmsSystem->bcu() != nullptr){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
+                    if(writeFrame(p)){
+                        m_stateMach->subState = 0;
+                        m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
+                        m_stateMach->stateDelay = 10;
+                        log("Start BCU Voltage source channel 1 success");
+                    }
+                    else{
+                        log("Start BCU Voltage source channel 1 failed");
+                    }
+                    delete p;
                 }
-                else{
-                    log("Start BCU Voltage source channel 1 failed");
-                }
-                delete p;
             }
             break;
         }
@@ -640,17 +658,22 @@ void BMS_Controller::handleStateMachTimeout()
             m_stateMach->stateDelay--;
         }
         if(m_stateMach->stateDelay == 0){
-            // start bmus
-            if(m_bmsSystem != nullptr){
-                CAN_Packet *p = m_bmsSystem->startBMUs(true);
-                if(writeFrame(p)){
-                    m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
-                    log("Start BMU Devices success");
+            if(m_bmsSystem->isSimulate()){
+                m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
+            }
+            else{
+                // start bmus
+                if(m_bmsSystem != nullptr){
+                    CAN_Packet *p = m_bmsSystem->startBMUs(true);
+                    if(writeFrame(p)){
+                        m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
+                        log("Start BMU Devices success");
+                    }
+                    else{
+                        log("Start BMU Devices failed");
+                    }
+                    delete p;
                 }
-                else{
-                    log("Start BMU Devices failed");
-                }
-                delete p;
             }
         }
         break;
@@ -721,6 +744,9 @@ void BMS_Controller::handleStateMachTimeout()
             m_stateMach->state = m_stateMach->pendState;
             m_stateMach->pendState = BMS_StateMachine::STATE_NONE;
         }
+
+        m_bmsSystem->ms_poll_100();
+
         break;
     case BMS_StateMachine::STATE_WRITE_FRAME:
         break;
@@ -987,19 +1013,20 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
         frame.setExtendedFrameFormat(true);
 
         foreach (CANBUSDevice *c, m_canbusDevice) {
-            c->dev->writeFrame(frame);
+            if(c->dev != nullptr)
+                c->dev->writeFrame(frame);
         }
 
-        if(m_canbusDevice.size()>0){
-            if(m_canbusDevice[1]->dev->writeFrame(frame)){
-                //qDebug()<<"Write frame OK";
-                ret = true;
-            }
-            else{
-                //qDebug()<<"Write frame Fail";
-                ret = false;
-            }
-        }
+//        if(m_canbusDevice.size()>0){
+//            if(m_canbusDevice[1]->dev->writeFrame(frame)){
+//                //qDebug()<<"Write frame OK";
+//                ret = true;
+//            }
+//            else{
+//                //qDebug()<<"Write frame Fail";
+//                ret = false;
+//            }
+//        }
     }
     return ret;
 }
