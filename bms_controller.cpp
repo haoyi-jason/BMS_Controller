@@ -599,13 +599,16 @@ void BMS_Controller::handleStateMachTimeout()
         case 0:
             if(m_stateMach->stateDelay > 0)
                 m_stateMach->stateDelay--;
-            if(m_stateMach->stateDelay == 0)
+            if(m_stateMach->stateDelay == 0){
+                m_stateMach->stateRetry = 0;
                 m_stateMach->subState = 1;
+            }
             break;
         case 1: // start bcu power
             if(m_bmsSystem->isSimulate()){
                 m_stateMach->subState++;
                 m_stateMach->stateDelay = 10;
+                m_stateMach->stateRetry = 0;
             }
             else{
                 if(m_bmsSystem->bcu() != nullptr){
@@ -613,12 +616,20 @@ void BMS_Controller::handleStateMachTimeout()
                     if(writeFrame(p)){
                         m_stateMach->subState++;
                         m_stateMach->stateDelay = 10;
+                        m_stateMach->stateRetry = 0;
                         log("Start BCU Voltage source channel 0 success");
                     }
                     else{
                         log("Start BCU Voltage source channel 0 failed");
+                        m_stateMach->stateRetry++;
+                        m_stateMach->stateDelay = 10;
+                        m_stateMach->subState = 0; // short delay
                     }
                     delete p;
+                    if(m_stateMach->stateRetry > 10){
+                        log("BCU Stat Failed, controller terminated");
+                        exit(-1);
+                    }
                 }
             }
             break;
@@ -641,12 +652,20 @@ void BMS_Controller::handleStateMachTimeout()
                         m_stateMach->subState = 0;
                         m_stateMach->state = BMS_StateMachine::STATE_INITIALIZING;
                         m_stateMach->stateDelay = 10;
+                        m_stateMach->stateRetry = 0;
                         log("Start BCU Voltage source channel 1 success");
                     }
                     else{
                         log("Start BCU Voltage source channel 1 failed");
+                        m_stateMach->stateRetry++;
+                        m_stateMach->stateDelay = 10;
+                        m_stateMach->subState = 2; // short delay
                     }
                     delete p;
+                    if(m_stateMach->stateRetry > 10){
+                        log("BCU Stat Failed, controller terminated");
+                        exit(-1);
+                    }
                 }
             }
             break;
@@ -671,8 +690,14 @@ void BMS_Controller::handleStateMachTimeout()
                     }
                     else{
                         log("Start BMU Devices failed");
+                        m_stateMach->stateRetry++;
+                        m_stateMach->stateDelay = 10;
                     }
                     delete p;
+                }
+                if(m_stateMach->stateRetry > 5){
+                    log("Start BMU failed");
+                    exit(-1);
                 }
             }
         }
@@ -1011,11 +1036,13 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
         frame.setPayload(p->data);
         frame.setFrameType(p->remote?QCanBusFrame::RemoteRequestFrame:QCanBusFrame::DataFrame);
         frame.setExtendedFrameFormat(true);
-
+        bool fail = false;
         foreach (CANBUSDevice *c, m_canbusDevice) {
-            if(c->dev != nullptr)
-                c->dev->writeFrame(frame);
+            if(c->dev != nullptr){
+                fail = !c->dev->writeFrame(frame);
+            }
         }
+        ret = !fail;
 
 //        if(m_canbusDevice.size()>0){
 //            if(m_canbusDevice[1]->dev->writeFrame(frame)){

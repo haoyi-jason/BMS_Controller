@@ -142,6 +142,7 @@ public:
     QList<CAN_Packet*> m_pendPacket;
     CAN_Packet *m_currPacket = nullptr;
     int stateDelay = 0;
+    int stateRetry = 0;
 };
 
 #endif // BMS_CONTROLLER_H
