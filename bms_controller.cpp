@@ -147,6 +147,9 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
                 m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
 
+                m_modbusDev->dev->setServerAddress(m_bmsSystem->localConfig()->modbus.ID.toInt());
+
+
                 if(m_modbusDev->dev->connectDevice()){
                     m_modbusDev->connected = true;
                     prepareModbusRegister();
@@ -257,6 +260,7 @@ void BMS_Controller::handleSocketDataReceived()
                     if(f.exists() && f.open(QIODevice::ReadOnly)){
                         QByteArray b = f.readAll();
                         f.close();
+                        //b.insert(0,QByteArray::number(BMS_CONTROLLER_VERSION,16));
                         b.insert(0,hsmsParser::genHeader(hsmsParser::BMS_CONFIG,b.size()));
                         s->write(b);
                         foreach (RemoteSystem *sys, m_clients) {
@@ -269,6 +273,9 @@ void BMS_Controller::handleSocketDataReceived()
                     break;
                 case 4: // SYS:CFGFW
 
+                    break;
+                case 5: // SYS:VER
+                    s->write(QByteArray::number(BMS_CONTROLLER_VERSION,16));
                     break;
                 }
                 break;
@@ -965,6 +972,7 @@ void BMS_Controller::prepareModbusRegister()
     //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,m_bmsSystem->stacks().at(0)->batteries().at(0)->cellCount());
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,m_bmsSystem->stacks().at(0)->batteries().at(0)->ntcCount());
+
 }
 
 void BMS_Controller::updateModbusRegister()

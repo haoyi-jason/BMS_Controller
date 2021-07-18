@@ -7,6 +7,8 @@
 #include <QCanBusDeviceInfo>
 #include "../BMS_HY01/bms_def.h"
 
+const quint32 BMS_CONTROLLER_VERSION = 0x01010001;
+
 class QTcpSocket;
 class QTcpServer;
 class BMS_System;
@@ -42,7 +44,7 @@ static QMap<QString, int> bcu_cmd_map{{"DO",0},{"VO",1},{"AIMAP",2},{"SAVE",3}};
 static QMap<QString, int> svi_cmd_map{{"AIMAP",0},{"SOHT",1},{"SSOC",2}};
 static QMap<QString, int> bmu_cmd_map{{"BV",0},{"BE",1}};
 static QMap<QString, int> sim_cmd_map{{"CV",0},{"CT",1},{"SV",2},{"SA",3},{"SSOC",4},{"RST",5}};
-static QMap<QString, int> sys_cmd_map{{"CFG",0},{"ALMRST",1},{"INIT_TIME",2},{"CFGFR",3},{"CFGFW",4}};
+static QMap<QString, int> sys_cmd_map{{"CFG",0},{"ALMRST",1},{"INIT_TIME",2},{"CFGFR",3},{"CFGFW",4},{"VER",5}};
 class BMS_Controller : public QObject
 {
     Q_OBJECT
