@@ -46,12 +46,6 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     else{
        //path = QCoreApplication::applicationDirPath()+"/config/local.json";
         path = "/opt/bms/config/controller.json"; //-- change after Jul. 21'
-        // try to mount sd
-        QProcess proc;
-
-        proc.execute("mount /dev/mmcblk1p1 /mnt/t");
-        proc.waitForFinished();
-        log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
     }
     //qDebug()<<"Current Path:"<<path;
 
@@ -174,6 +168,14 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     }
 
   //  m_bmsSystem->On_BMU_ov(0x10);
+    if(!QSysInfo::productType().contains("win")){
+        // try to mount sd
+        QProcess proc;
+
+        proc.execute("mount /dev/mmcblk1p1 /mnt/t");
+        proc.waitForFinished();
+        log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
+    }
 }
 
 bool BMS_Controller::startServer()
@@ -940,7 +942,7 @@ void BMS_Controller::log(QString message)
     QString path =QString("%1/sys/log-%2.txt").arg(this->m_bmsSystem->localConfig()->record.LogPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
     QFile f(path);
     QString logText = QString("%1:%2\n").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss:")).arg(message);
-    if(f.open(QIODevice::WriteOnly | QIODevice::Append)){
+    if(f.open(QIODevice::ReadWrite | QIODevice::Append)){
         f.write(logText.toUtf8());
         f.close();
         //return true;
@@ -977,15 +979,17 @@ void BMS_Controller::prepareModbusRegister()
 
 void BMS_Controller::updateModbusRegister()
 {
-    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,4,m_bmsSystem->stacks().at(0)->stackVoltage());
 
     int offset = 13;
+    int sv_offset = 35;
     short csum = 0;
+    short vsum = 0;
     int stack = 1;
     foreach (BMS_Stack *s, m_bmsSystem->stacks()) {
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,offset++,s->stackCurrent());
+        m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,sv_offset++,s->stackVoltage());
         csum += s->stackCurrent();
-
+        vsum += s->stackVoltage();
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack    ,s->maxCellVoltage());
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 1,s->minCellVoltage());
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1000*stack + 2,s->maxStackTemperature());
@@ -1017,6 +1021,8 @@ void BMS_Controller::updateModbusRegister()
         m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,101 + (stack-1)*2,err);
         stack++;
     }
+    vsum /= (stack-1);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,4,vsum);
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,5,csum);
 
     // digital output state
