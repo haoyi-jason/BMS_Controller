@@ -161,7 +161,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
             connect(mStateTimer,&QTimer::timeout,this,&BMS_Controller::handleStateMachTimeout);
             mStateTimer->start(100);
 
-            m_bmsSystem->enableAlarmSystem(true);
+//            m_bmsSystem->enableAlarmSystem(true); // move to state machine
             //connect(m_bmsSystem,&BMS_System::setBalancingVoltage,this,&BMS_Controller::setBalancingVoltage);
             connect(m_bmsSystem,&BMS_System::logMessage,this,&BMS_Controller::log);
         }
@@ -695,6 +695,7 @@ void BMS_Controller::handleStateMachTimeout()
                     CAN_Packet *p = m_bmsSystem->startBMUs(true);
                     if(writeFrame(p)){
                         m_stateMach->state = BMS_StateMachine::STATE_INITIALIZED;
+                        m_stateMach->stateDelay = 0;
                         log("Start BMU Devices success");
                     }
                     else{
@@ -712,12 +713,27 @@ void BMS_Controller::handleStateMachTimeout()
         }
         break;
     case BMS_StateMachine::STATE_INITIALIZED:
-        mTimer->start(100);
-        m_stateMach->state = BMS_StateMachine::STATE_NORMAL;
-        log("BMS System initialized");
+        if(m_stateMach->stateDelay > 0){
+            m_stateMach->stateDelay--;
+        }
+        else if(m_stateMach->stateDelay == 0){
+            if(m_stateMach->stateDelay == 0){
+                mTimer->start(100);
+                m_stateMach->state = BMS_StateMachine::STATE_NORMAL;
+                m_validDelay = 50;
+                log("BMS System initialized");
+            }
+        }
 
         break;
     case BMS_StateMachine::STATE_NORMAL:
+        // check if can enable alarm system
+        if(m_validDelay > 0){
+            m_validDelay--;
+            if(m_validDelay == 0){
+                m_bmsSystem->enableAlarmSystem(true);
+            }
+        }
         // generate heartbeat packet
         if(m_heartbeatCounter > 0){
             m_heartbeatCounter--;

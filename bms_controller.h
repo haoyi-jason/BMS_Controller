@@ -101,6 +101,7 @@ private:
     int m_heartbeatCounter=10;
     int m_balancingDelay = 50; // every 5 seconds
     int m_ioDelay = 10;
+    int m_validDelay = 50;
 };
 
 
