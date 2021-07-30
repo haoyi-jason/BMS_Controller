@@ -82,7 +82,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                         proc->start("sh",QStringList()<<"-c"<<cmd);
                         proc->waitForFinished();
                         //qDebug()<<"Proc Result:"<<proc->readAll();
-                        cmd = QString("ip link set %1 up type can bitrate %2").arg(dev->name).arg(dev->bitrate);
+                        cmd = QString("ip link set %1 up type can bitrate %2 restart-ms 1000").arg(dev->name).arg(dev->bitrate);
                         proc->start("sh",QStringList()<<"-c"<<cmd);
                         proc->waitForFinished();
                         //qDebug()<<"Proc Result:"<<proc->readAll();
@@ -788,6 +788,12 @@ void BMS_Controller::handleStateMachTimeout()
         }else{
             writeFrame(m_bmsSystem->broadcastBalancing());
             m_balancingDelay = 50;
+
+            // add 210730, set vsource on every 5 second to prevent bus error
+            CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
+            writeFrame(p);
+            p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
+            writeFrame(p);
         }
 
         if(m_stateMach->pendState != BMS_StateMachine::STATE_NONE){
