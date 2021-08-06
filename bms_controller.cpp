@@ -386,16 +386,22 @@ void BMS_Controller::handleSocketDataReceived()
                         CAN_Packet *p = nullptr;
                         switch(sl[3].toInt()){
                         case 0: // raw low
-                            p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
+                            //p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
                             break;
                         case 1: // raw high
-                            p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
+                            //p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
                             break;
                         case 2: // eng low
-                            p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
+                            //p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
                             break;
                         case 3: // eng high
-                            p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                            //p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                            break;
+                        case 4: // zero cal
+                            p = BMS_SVIDevice::zeroCalibration(sl[2].toInt());
+                            break;
+                        case 5: // band cal
+                            p = BMS_SVIDevice::bandCalibration(sl[2].toInt(),sl[4].toFloat());
                             break;
                         }
                         if(p != nullptr){
@@ -404,6 +410,7 @@ void BMS_Controller::handleSocketDataReceived()
                             frame.setFrameId(id);
                             frame.setPayload(p->data);
                             frame.setFrameType(QCanBusFrame::DataFrame);
+
                             if(m_canbusDevice.size()>0){
                                 if(m_canbusDevice[1]->dev->writeFrame(frame)){
                                     qDebug()<<"Write frame OK";
@@ -792,6 +799,7 @@ void BMS_Controller::handleStateMachTimeout()
             // add 210730, set vsource on every 5 second to prevent bus error
             CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
             writeFrame(p);
+
             p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
             writeFrame(p);
         }
@@ -1072,10 +1080,12 @@ bool BMS_Controller::writeFrame(CAN_Packet *p)
         frame.setPayload(p->data);
         frame.setFrameType(p->remote?QCanBusFrame::RemoteRequestFrame:QCanBusFrame::DataFrame);
         frame.setExtendedFrameFormat(true);
+
         bool fail = false;
         foreach (CANBUSDevice *c, m_canbusDevice) {
             if(c->dev != nullptr){
                 fail = !c->dev->writeFrame(frame);
+                //QThread::msleep(50);
             }
         }
         ret = !fail;
