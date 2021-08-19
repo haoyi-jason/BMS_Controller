@@ -113,6 +113,8 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 }
             }
 
+            // check network config
+            configNetwork();
             // start MODBUS Slave
             if(m_bmsSystem->localConfig()->modbus.ConfigReady){
                 this->m_modbusDev = new MODBUSDevice();
@@ -169,6 +171,9 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
   //  m_bmsSystem->On_BMU_ov(0x10);
     if(!QSysInfo::productType().contains("win")){
+        if(!QDir("/mnt/t").exists()){
+            QDir().mkdir("/mnt/t");
+        }
         // try to mount sd
         QProcess proc;
 
@@ -176,6 +181,24 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
         proc.waitForFinished();
         log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
     }
+}
+
+void BMS_Controller::configNetwork()
+{
+   if(!m_bmsSystem->localConfig()->modbus.ConfigReady) return;
+
+   qDebug()<<Q_FUNC_INFO;
+   if(!m_bmsSystem->localConfig()->network.Dhcp){
+       QString ip = m_bmsSystem->localConfig()->network.ip;
+       QProcess proc;
+       QString cmd = QString("/bin/sh -c \"ifconfig eth0 down\"");
+       proc.execute(cmd);
+       proc.waitForFinished();
+       cmd = QString("/bin/sh -c \"ifconfig eth0 %1 up\"").arg(ip);
+       proc.execute(cmd);
+       proc.waitForFinished();
+   }
+
 }
 
 bool BMS_Controller::startServer()
@@ -381,44 +404,32 @@ void BMS_Controller::handleSocketDataReceived()
                 break;
             case 5: // SVI
                 switch(svi_cmd_map.value(sl[1])){
-                case 0: //SVI:AINMAP:CH:OPT:VALUE
-                    if(sl.size() == 5){
-                        CAN_Packet *p = nullptr;
+                case 0: //SVI:GID:AINMAP:CH:OPT:VALUE
+                    qDebug()<<sl;
+                    if(sl.size() == 6){
+                        CAN_Packet *p = new CAN_Packet;
                         switch(sl[3].toInt()){
                         case 0: // raw low
-                            //p = this->m_bmsSystem->bcu()->setADCRawLow(sl[2].toInt(),sl[4].toInt());
+                            p = BMS_SVIDevice::rawLow(p,sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
                             break;
                         case 1: // raw high
-                            //p = this->m_bmsSystem->bcu()->setADCRawHigh(sl[2].toInt(),sl[4].toInt());
+                            p = BMS_SVIDevice::rawHigh(sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
                             break;
                         case 2: // eng low
-                            //p = this->m_bmsSystem->bcu()->setADCEngLow(sl[2].toInt(),sl[4].toFloat());
+                            p = BMS_SVIDevice::engLow(sl[2].toInt(),sl[3].toInt(),sl[5].toFloat());
                             break;
                         case 3: // eng high
-                            //p = this->m_bmsSystem->bcu()->setADCEngHigh(sl[2].toInt(),sl[4].toFloat());
+                            p = BMS_SVIDevice::engHigh(sl[2].toInt(),sl[3].toInt(),sl[5].toFloat());
                             break;
                         case 4: // zero cal
-                            p = BMS_SVIDevice::zeroCalibration(sl[2].toInt());
+                            p = BMS_SVIDevice::zeroCalibration(sl[2].toInt(),sl[3].toInt());
                             break;
                         case 5: // band cal
-                            p = BMS_SVIDevice::bandCalibration(sl[2].toInt(),sl[4].toFloat());
+                            p = BMS_SVIDevice::bandCalibration(sl[2].toInt(),sl[3].toInt(),sl[5].toFloat());
                             break;
                         }
                         if(p != nullptr){
-                            QCanBusFrame frame;
-                            quint32 id = p->Command | (0x1F << 12); // SVI ID always = 0x1F (31D)
-                            frame.setFrameId(id);
-                            frame.setPayload(p->data);
-                            frame.setFrameType(QCanBusFrame::DataFrame);
-
-                            if(m_canbusDevice.size()>0){
-                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
-                                    qDebug()<<"Write frame OK";
-                                }
-                                else{
-                                    qDebug()<<"Write frame Fail";
-                                }
-                            }
+                            addFrame(p);
                         }
                     }
                     break;
@@ -811,6 +822,11 @@ void BMS_Controller::handleStateMachTimeout()
 
         m_bmsSystem->ms_poll_100();
 
+        if(m_pendPackets.size() > 0){
+            writeFrame(m_pendPackets.first());
+            m_pendPackets.removeFirst();
+        }
+
         break;
     case BMS_StateMachine::STATE_WRITE_FRAME:
         break;
@@ -876,7 +892,7 @@ void BMS_Controller::OnCanBusError(QCanBusDevice::CanBusError error)
     QCanBusDevice *dev = (QCanBusDevice*)sender();
     foreach(CANBUSDevice *d, m_canbusDevice){
         if(d->dev == dev){
-            qDebug()<<"Canbus Error:";
+            qDebug()<<"Canbus Error:"<<error;
         }
     }
 }
@@ -1059,6 +1075,11 @@ void BMS_Controller::updateModbusRegister()
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,33,m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()));
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,34,m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()));
 
+}
+
+void BMS_Controller::addFrame(CAN_Packet *p)
+{
+    m_pendPackets.append(p);
 }
 
 bool BMS_Controller::writeFrame(CAN_Packet *p)

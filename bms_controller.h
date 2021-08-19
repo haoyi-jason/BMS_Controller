@@ -74,11 +74,13 @@ public slots:
 
 private slots:
     void setBalancingVoltage(ushort v);
+    void configNetwork();
 
 private:
     void prepareModbusRegister();
     void updateModbusRegister();
     bool writeFrame(CAN_Packet *p);
+    void addFrame(CAN_Packet *p);
 
 private:
     QTcpServer *m_server = nullptr;
@@ -102,6 +104,7 @@ private:
     int m_balancingDelay = 50; // every 5 seconds
     int m_ioDelay = 10;
     int m_validDelay = 50;
+    QList<CAN_Packet*> m_pendPackets;
 };
 
 
