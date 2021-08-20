@@ -808,11 +808,12 @@ void BMS_Controller::handleStateMachTimeout()
             m_balancingDelay = 50;
 
             // add 210730, set vsource on every 5 second to prevent bus error
-            CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
-            writeFrame(p);
+            // remove 210820, use bcu to monitoring this function
+            //CAN_Packet *p = m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0));
+            //writeFrame(p);
 
-            p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
-            writeFrame(p);
+            //p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
+            //writeFrame(p);
         }
 
         if(m_stateMach->pendState != BMS_StateMachine::STATE_NONE){
