@@ -187,7 +187,7 @@ void BMS_Controller::configNetwork()
 {
    if(!m_bmsSystem->localConfig()->modbus.ConfigReady) return;
 
-   qDebug()<<Q_FUNC_INFO;
+   //qDebug()<<Q_FUNC_INFO;
    if(!m_bmsSystem->localConfig()->network.Dhcp){
        QString ip = m_bmsSystem->localConfig()->network.ip;
        QProcess proc;
@@ -814,6 +814,14 @@ void BMS_Controller::handleStateMachTimeout()
 
             //p = m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1));
             //writeFrame(p);
+            if(m_bmsSystem->bcu()->getWorkingCurrent(0) < 20)
+            {
+                writeFrame(m_bmsSystem->bcu()->setVoltageSource(0,m_bmsSystem->bcu()->vsource_limit(0)));
+            }
+            else if(m_bmsSystem->bcu()->getWorkingCurrent(1) < 20){
+                writeFrame(m_bmsSystem->bcu()->setVoltageSource(1,m_bmsSystem->bcu()->vsource_limit(1)));
+            }
+
         }
 
         if(m_stateMach->pendState != BMS_StateMachine::STATE_NONE){
