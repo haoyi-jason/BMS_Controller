@@ -17,6 +17,8 @@ class RemoteSystem;
 class QSerialPort;
 class QModbusRtuSerialSlave;
 class BMS_StateMachine;
+class QModbusServer;
+class QUdpSocket;
 
 class CANBUSDevice{
 public:
@@ -35,7 +37,8 @@ public:
     QString portName;
     int bitrate;
     bool connected=false;
-    QModbusRtuSerialSlave *dev;
+    QModbusServer *dev;
+    int tcpPort;
 };
 
 
@@ -75,6 +78,7 @@ public slots:
 private slots:
     void setBalancingVoltage(ushort v);
     void configNetwork();
+    void broadCastUDPPacket();
 
 private:
     void prepareModbusRegister();
@@ -94,6 +98,7 @@ private:
     QList<QCanBusDeviceInfo> m_canbusDevInfo;
     QList<CANBUSDevice*> m_canbusDevice;
     MODBUSDevice *m_modbusDev = nullptr;
+    MODBUSDevice *m_modbusTCP = nullptr;
     QSerialPort *m_serialPort= nullptr;
     QString m_logPath = "./log";
     bool m_connected=false;
@@ -105,6 +110,8 @@ private:
     int m_ioDelay = 10;
     int m_validDelay = 50;
     QList<CAN_Packet*> m_pendPackets;
+    QTimer mUdpTimer;
+    QUdpSocket *mUdpSocket;
 };
 
 

@@ -14,6 +14,7 @@
 #include<QJsonArray>
 #include <QtSerialPort/QSerialPort>
 #include <QModbusRtuSerialSlave>
+#include <QModbusTcpServer>
 #include "../BMS_HY01/bms_def.h"
 #include "../BMS_HY01/secs.h"
 #include "../BMS_HY01/bms_bmudevice.h"
@@ -121,39 +122,62 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 this->m_modbusDev->bitrate = m_bmsSystem->localConfig()->modbus.Bitrate.toInt();
                 this->m_modbusDev->portName = m_bmsSystem->localConfig()->modbus.Port;
                 log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
-                m_modbusDev->dev = new QModbusRtuSerialSlave();
-                if(QSysInfo::productType().contains("win")){
-                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,"COM1");
+
+                /*
+                 * modbus.Enable = TRUE for RTU, False for TCP
+                 */
+                QString ipAddress;
+                const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+                for (const QHostAddress &address: QNetworkInterface::allAddresses()) {
+                    if (address.protocol() == QAbstractSocket::IPv4Protocol && address != localhost){
+                         qDebug() << address.toString();
+                        ipAddress = address.toString();
+                    }
+                }
+                if(!m_bmsSystem->localConfig()->modbus.Enable){
+                    m_modbusDev->dev = new QModbusTcpServer();
+                    this->m_modbusDev->tcpPort = m_bmsSystem->localConfig()->modbus.TCPPort.toInt();
+                    //const QUrl url = QUrl::fromUserInput("127.0.0.1:502");
+                    //this->m_modbusDev->dev_tcp->setConnectionParameter(QModbusDevice::NetworkPortParameter, url.port());
+                    this->m_modbusDev->dev->setConnectionParameter(QModbusDevice::NetworkAddressParameter, ipAddress);
+                    this->m_modbusDev->dev->setConnectionParameter(QModbusDevice::NetworkPortParameter,m_modbusDev->tcpPort);
                 }
                 else{
-                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
-                }
-                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
-                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
-                QString parity = m_bmsSystem->localConfig()->modbus.Parity;
-                if(parity == "EVEN"){
-                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::EvenParity);
-                }
-                else if(parity == "ODD"){
-                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::OddParity);
-                }
-                else{
-                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
-                }
+                    m_modbusDev->dev = new QModbusRtuSerialSlave();
+                    if(QSysInfo::productType().contains("win")){
+                        m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,"COM1");
+                    }
+                    else{
+                        m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialPortNameParameter,m_modbusDev->portName);
+                    }
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialBaudRateParameter,m_modbusDev->bitrate);
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialDataBitsParameter,QSerialPort::Data8);
+                    QString parity = m_bmsSystem->localConfig()->modbus.Parity;
+                    if(parity == "EVEN"){
+                        m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::EvenParity);
+                    }
+                    else if(parity == "ODD"){
+                        m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::OddParity);
+                    }
+                    else{
+                        m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialParityParameter,QSerialPort::NoParity);
+                    }
 
-                m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
+                    m_modbusDev->dev->setConnectionParameter(QModbusDevice::SerialStopBitsParameter,QSerialPort::OneStop);
 
+                }
                 m_modbusDev->dev->setServerAddress(m_bmsSystem->localConfig()->modbus.ID.toInt());
 
 
                 if(m_modbusDev->dev->connectDevice()){
                     m_modbusDev->connected = true;
                     prepareModbusRegister();
-                    log("Modbus RTU Slave start successfully");
+                    log("Modbus Server start successfully");
                 }
                 else{
-                    log("MODBUS RTU Slave start failed");
+                    log("MODBUS Server start failed");
                 }
+
             }
             mTimer = new QTimer();
             connect(mTimer,&QTimer::timeout,this,&BMS_Controller::handleTimeout);
@@ -189,16 +213,41 @@ void BMS_Controller::configNetwork()
 
    //qDebug()<<Q_FUNC_INFO;
    if(!m_bmsSystem->localConfig()->network.Dhcp){
-       QString ip = m_bmsSystem->localConfig()->network.ip;
-       QProcess proc;
-       QString cmd = QString("/bin/sh -c \"ifconfig eth0 down\"");
-       proc.execute(cmd);
-       proc.waitForFinished();
-       cmd = QString("/bin/sh -c \"ifconfig eth0 %1 up\"").arg(ip);
-       proc.execute(cmd);
-       proc.waitForFinished();
+       QString ipAddress;
+       const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+       for (const QHostAddress &address: QNetworkInterface::allAddresses()) {
+           if (address.protocol() == QAbstractSocket::IPv4Protocol && address != localhost){
+                qDebug() << address.toString();
+               ipAddress = address.toString();
+           }
+       }
+        if(QString::compare(ipAddress.trimmed(),m_bmsSystem->localConfig()->network.ip.trimmed(),Qt::CaseInsensitive)){
+            qDebug()<<Q_FUNC_INFO<< " Config to IP:"<<m_bmsSystem->localConfig()->network.ip;
+            QString ip = m_bmsSystem->localConfig()->network.ip;
+            QProcess proc;
+            QString cmd = QString("/bin/sh -c \"ifconfig eth0 down\"");
+            proc.execute(cmd);
+            proc.waitForFinished();
+            cmd = QString("/bin/sh -c \"ifconfig eth0 %1 up\"").arg(ip);
+            proc.execute(cmd);
+            proc.waitForFinished();
+        }
+        else{
+            qDebug()<<"Network Address OK";
+        }
    }
 
+   // start udp broadcaster
+   mUdpSocket = new QUdpSocket(this);
+   connect(&mUdpTimer,&QTimer::timeout,this,&BMS_Controller::broadCastUDPPacket);
+   mUdpTimer.start(5000); // every 5000 ms
+
+}
+
+void BMS_Controller::broadCastUDPPacket()
+{
+    QByteArray msg = "BMS_HMI\n";
+    mUdpSocket->writeDatagram(msg,QHostAddress::Broadcast,5329);
 }
 
 bool BMS_Controller::startServer()
@@ -1025,10 +1074,23 @@ void BMS_Controller::prepareModbusRegister()
     // update static variable
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,0,m_bmsSystem->stacks().size());
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,1,m_bmsSystem->batteriesPerStack().at(0));
-    //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,8);
-    //m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,5);
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,2,m_bmsSystem->stacks().at(0)->batteries().at(0)->cellCount());
     m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,3,m_bmsSystem->stacks().at(0)->batteries().at(0)->ntcCount());
+
+    // 40020
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,20,m_bmsSystem->localConfig()->criteria.cell.volt_warning.Low_Set.toFloat()*1000);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,21,m_bmsSystem->localConfig()->criteria.cell.volt_warning.High_Set.toFloat()*1000);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,22,0);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,23,m_bmsSystem->localConfig()->criteria.cell.volt_alarm.Low_Set.toFloat()*1000);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,24,m_bmsSystem->localConfig()->criteria.cell.volt_alarm.High_Set.toFloat()*1000);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,25,0);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,26,m_bmsSystem->localConfig()->criteria.cell.temp_warning.Low_Set.toFloat());
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,27,m_bmsSystem->localConfig()->criteria.cell.temp_warning.High_Set.toFloat());
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,28,m_bmsSystem->localConfig()->criteria.cell.temp_alarm.Low_Set.toInt());
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,29,m_bmsSystem->localConfig()->criteria.cell.temp_alarm.High_Set.toInt());
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,29,m_bmsSystem->localConfig()->event_output.alarm_latch?1:0);
+    m_modbusDev->dev->setData(QModbusDataUnit::HoldingRegisters,29,m_bmsSystem->localConfig()->event_output.warning_latch?1:0);
+
 
 }
 
