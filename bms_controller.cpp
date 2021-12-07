@@ -121,6 +121,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 this->m_modbusDev = new MODBUSDevice();
                 this->m_modbusDev->bitrate = m_bmsSystem->localConfig()->modbus.Bitrate.toInt();
                 this->m_modbusDev->portName = m_bmsSystem->localConfig()->modbus.Port;
+
                 log(QString("Start MODBUS RTU Slave at %1, baudrate=%2").arg(m_modbusDev->portName).arg(m_modbusDev->bitrate));
 
                 /*
@@ -139,7 +140,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     this->m_modbusDev->tcpPort = m_bmsSystem->localConfig()->modbus.TCPPort.toInt();
                     //const QUrl url = QUrl::fromUserInput("127.0.0.1:502");
                     //this->m_modbusDev->dev_tcp->setConnectionParameter(QModbusDevice::NetworkPortParameter, url.port());
-                    this->m_modbusDev->dev->setConnectionParameter(QModbusDevice::NetworkAddressParameter, ipAddress);
+                    this->m_modbusDev->dev->setConnectionParameter(QModbusDevice::NetworkAddressParameter, m_bmsSystem->localConfig()->network.ip.trimmed());
                     this->m_modbusDev->dev->setConnectionParameter(QModbusDevice::NetworkPortParameter,m_modbusDev->tcpPort);
                 }
                 else{
@@ -173,9 +174,11 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                     m_modbusDev->connected = true;
                     prepareModbusRegister();
                     log("Modbus Server start successfully");
+                    qDebug()<<"Modbus Start success";
                 }
                 else{
                     log("MODBUS Server start failed");
+                    qDebug()<<"Modbus Startu fail";
                 }
 
             }
@@ -209,33 +212,60 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 
 void BMS_Controller::configNetwork()
 {
-   if(!m_bmsSystem->localConfig()->modbus.ConfigReady) return;
+   //if(!m_bmsSystem->localConfig()->modbus.ConfigReady) return;
 
-   //qDebug()<<Q_FUNC_INFO;
-   if(!m_bmsSystem->localConfig()->network.Dhcp){
-       QString ipAddress;
-       const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
-       for (const QHostAddress &address: QNetworkInterface::allAddresses()) {
-           if (address.protocol() == QAbstractSocket::IPv4Protocol && address != localhost){
-                qDebug() << address.toString();
-               ipAddress = address.toString();
-           }
-       }
-        if(QString::compare(ipAddress.trimmed(),m_bmsSystem->localConfig()->network.ip.trimmed(),Qt::CaseInsensitive)){
-            qDebug()<<Q_FUNC_INFO<< " Config to IP:"<<m_bmsSystem->localConfig()->network.ip;
-            QString ip = m_bmsSystem->localConfig()->network.ip;
-            QProcess proc;
-            QString cmd = QString("/bin/sh -c \"ifconfig eth0 down\"");
-            proc.execute(cmd);
-            proc.waitForFinished();
-            cmd = QString("/bin/sh -c \"ifconfig eth0 %1 up\"").arg(ip);
-            proc.execute(cmd);
-            proc.waitForFinished();
-        }
-        else{
-            qDebug()<<"Network Address OK";
-        }
-   }
+//   //qDebug()<<Q_FUNC_INFO;
+//   QString cmd;
+//   QString nicName;
+//   QProcess proc;
+//   if(!m_bmsSystem->localConfig()->network.Dhcp){
+//       QString ipAddress;
+//       //QHostAddress ha;
+//       const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+//       for (const QHostAddress &address: QNetworkInterface::allAddresses()) {
+//           if (address.protocol() == QAbstractSocket::IPv4Protocol && address != localhost){
+//                //qDebug() << address.toString();
+//               ipAddress = address.toString();
+//               break;
+//               //ha = address;
+//           }
+//       }
+//       proc.start("connmanctl services");
+//       proc.waitForFinished();
+//       QStringList sl = QString(proc.readAll()).split(" ",QString::SkipEmptyParts);
+//       nicName = sl.at(2).trimmed();
+//       if(nicName.isEmpty()){
+//            qDebug()<<"No Nic presents";
+//           return; // no nic
+//       }
+////       qDebug()<<"connmanctl:"<<sl.at(2);
+//       qDebug()<<Q_FUNC_INFO<<" Compare:"<<ipAddress<<":"<<m_bmsSystem->localConfig()->network.ip;
+//        if(QString::compare(ipAddress.trimmed(),m_bmsSystem->localConfig()->network.ip.trimmed(),Qt::CaseInsensitive)){
+////            ha.setAddress(m_bmsSystem->localConfig()->network.ip.trimmed());
+//            qDebug()<<Q_FUNC_INFO<< " Config to IP:"<<m_bmsSystem->localConfig()->network.ip;
+//            QString ip = m_bmsSystem->localConfig()->network.ip;
+//            //cmd = QString("connmanctl config %1 --ipv4 manual %2").arg(nicName).arg(ip);
+////            //proc.execute(cmd);
+////            //proc.start("sh",QStringList()<<"-c");
+////            //proc.waitForFinished();
+//            cmd = QString("/bin/sh -c \"ifconfig eth0 %1 up\"").arg(ip);
+////            proc->start("/bin/sh",QStringList()<<"-c" << QString("if config eth0 %1 netmask 255.255.255.0 up").arg(ip));
+////            proc.start(QString("if config eth0 %1 netmask 255.255.255.0 up").arg(ip));
+////            qDebug()<<"connmanctl:"<<QString(proc.readAll());
+//            qDebug()<<"Execute command:"<<cmd;
+//            proc.start(cmd);
+//            proc.waitForFinished();
+//        }
+//        else{
+//            qDebug()<<"Network Address OK";
+//        }
+
+//   }else{
+//       cmd = QString("connmanctl config %1 --ipv4 dhcp").arg(nicName);
+//       qDebug()<<"Execute command:"<<cmd;
+//       proc.start(cmd);
+//       proc.waitForFinished();
+//   }
 
    // start udp broadcaster
    mUdpSocket = new QUdpSocket(this);
@@ -248,6 +278,7 @@ void BMS_Controller::broadCastUDPPacket()
 {
     QByteArray msg = "BMS_HMI\n";
     mUdpSocket->writeDatagram(msg,QHostAddress::Broadcast,5329);
+    //qDebug()<<Q_FUNC_INFO;
 }
 
 bool BMS_Controller::startServer()
