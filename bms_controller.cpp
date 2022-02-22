@@ -197,17 +197,19 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
     }
 
   //  m_bmsSystem->On_BMU_ov(0x10);
-    if(!QSysInfo::productType().contains("win")){
-        if(!QDir("/mnt/t").exists()){
-            QDir().mkdir("/mnt/t");
-        }
-        // try to mount sd
-        QProcess proc;
+// 220117 remove mount
+//    if(!QSysInfo::productType().contains("win")){
+//        if(!QDir("/mnt/t").exists()){
 
-        proc.execute("mount /dev/mmcblk1p1 /mnt/t");
-        proc.waitForFinished();
-        log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
-    }
+//            QDir().mkdir("/mnt/t");
+//        }
+//        // try to mount sd
+//        QProcess proc;
+
+//        proc.execute("mount /dev/mmcblk1p1 /mnt/t");
+//        proc.waitForFinished();
+//        log(QString("Try to Mount SD Card: %1").arg(QString(proc.readAll())));
+//    }
 }
 
 void BMS_Controller::configNetwork()
@@ -482,7 +484,7 @@ void BMS_Controller::handleSocketDataReceived()
                     break;
                 }
                 break;
-            case 5: // SVI
+            case 5: // SVC
                 switch(svi_cmd_map.value(sl[1])){
                 case 0: //SVI:GID:AINMAP:CH:OPT:VALUE
                     qDebug()<<sl;
@@ -1074,7 +1076,7 @@ bool BMS_Controller::loadConfig()
 void BMS_Controller::log(QString message)
 {
 
-    QString path =QString("%1/sys/log-%2.txt").arg(this->m_bmsSystem->localConfig()->record.LogPath).arg(QDateTime::currentDateTime().toString("yyyyMMdd"));
+    QString path =QString("%1/sys/log-%2.txt").arg(this->m_bmsSystem->localConfig()->record.LogPath).arg(QDateTime::currentDateTime().toString("yyyy-MM-dd"));
     QFile f(path);
     QString logText = QString("%1:%2\n").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss:")).arg(message);
     if(f.open(QIODevice::ReadWrite | QIODevice::Append)){
