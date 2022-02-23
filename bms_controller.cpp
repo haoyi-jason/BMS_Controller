@@ -486,11 +486,11 @@ void BMS_Controller::handleSocketDataReceived()
                 break;
             case 5: // SVC
                 switch(svi_cmd_map.value(sl[1])){
-                case 0: //SVI:GID:AINMAP:CH:OPT:VALUE
+                case 0: //SVI:AINMAP:GID:CH:OPT:VALUE
                     qDebug()<<sl;
                     if(sl.size() == 6){
-                        CAN_Packet *p = new CAN_Packet;
-                        switch(sl[3].toInt()){
+                        CAN_Packet *p;
+                        switch(sl[4].toInt()){
                         case 0: // raw low
                             p = BMS_SVIDevice::rawLow(p,sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
                             break;
@@ -511,7 +511,20 @@ void BMS_Controller::handleSocketDataReceived()
                             break;
                         }
                         if(p != nullptr){
-                            addFrame(p);
+                            QCanBusFrame frame;
+                            frame.setFrameId(p->Command);
+                            frame.setPayload(p->data);
+                            frame.setFrameType(QCanBusFrame::DataFrame);
+                            //qDebug()<<"Size="<<p->data.size() << "/" << frame.payload().size();
+                            if(m_canbusDevice.size()>0){
+                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
+                                    qDebug()<<"Write frame OK";
+                                }
+                                else{
+                                    qDebug()<<"Write frame Fail";
+                                }
+                            }
+                            delete p;
                         }
                     }
                     break;
@@ -983,7 +996,7 @@ void BMS_Controller::OnCanBusError(QCanBusDevice::CanBusError error)
     QCanBusDevice *dev = (QCanBusDevice*)sender();
     foreach(CANBUSDevice *d, m_canbusDevice){
         if(d->dev == dev){
-            qDebug()<<"Canbus Error:"<<error;
+            qDebug()<<"Canbus Error:"<<error << "Device:" << (dev->objectName());
         }
     }
 }
