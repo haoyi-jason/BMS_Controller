@@ -492,7 +492,7 @@ void BMS_Controller::handleSocketDataReceived()
                         CAN_Packet *p;
                         switch(sl[4].toInt()){
                         case 0: // raw low
-                            p = BMS_SVIDevice::rawLow(p,sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
+                            p = BMS_SVIDevice::rawLow(sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
                             break;
                         case 1: // raw high
                             p = BMS_SVIDevice::rawHigh(sl[2].toInt(),sl[3].toInt(),sl[5].toInt());
@@ -511,20 +511,22 @@ void BMS_Controller::handleSocketDataReceived()
                             break;
                         }
                         if(p != nullptr){
-                            QCanBusFrame frame;
-                            frame.setFrameId(p->Command);
-                            frame.setPayload(p->data);
-                            frame.setFrameType(QCanBusFrame::DataFrame);
-                            //qDebug()<<"Size="<<p->data.size() << "/" << frame.payload().size();
-                            if(m_canbusDevice.size()>0){
-                                if(m_canbusDevice[1]->dev->writeFrame(frame)){
-                                    qDebug()<<"Write frame OK";
-                                }
-                                else{
-                                    qDebug()<<"Write frame Fail";
-                                }
-                            }
-                            delete p;
+                            addFrame(p);
+//                            qDebug()<<"Write SVC Calibration";
+//                            QCanBusFrame frame;
+//                            frame.setFrameId(p->Command);
+//                            frame.setPayload(p->data);
+//                            frame.setFrameType(QCanBusFrame::DataFrame);
+//                            //qDebug()<<"Size="<<p->data.size() << "/" << frame.payload().size();
+//                            if(m_canbusDevice.size()>0){
+//                                if(m_canbusDevice[0]->dev->writeFrame(frame)){
+//                                    qDebug()<<"Write frame OK";
+//                                }
+//                                else{
+//                                    qDebug()<<"Write frame Fail";
+//                                }
+//                            }
+//                            delete p;
                         }
                     }
                     break;
