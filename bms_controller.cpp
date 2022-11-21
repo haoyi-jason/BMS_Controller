@@ -865,18 +865,27 @@ void BMS_Controller::handleStateMachTimeout()
         if(m_ioDelay == 0){
             m_ioDelay = 10;
             quint32 alarm = m_bmsSystem->alarmState();
+
+            /*
+             *  20221119: modify digital output 0 to control switch box
+             *  Warning on StackOV && Cell OV (alarm bit mask == 0x05)
+             *
+             */
             // warning @ low 16-bit
-            if((alarm & 0xFFFF) != 0){
+//            if((alarm & 0xFFFF) != 0){
+            //qDebug()<<"Alarm:"<<alarm;
+            if((alarm & 0x0005) == 0x0005){
                 // check if bcu's digital output state is set or not
-                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 0){
-                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 1){
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
                     //p->Command |= (1 <<12);
                     writeFrame(p);
                 }
             }
-            else if(!m_bmsSystem->warinig_latch()){
+            else // if(!m_bmsSystem->warinig_latch())
+            {
                 if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 0){
-                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
+                    CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),1);
                     //p->Command |= (1 <<12);
                     writeFrame(p);
                 }
@@ -890,7 +899,7 @@ void BMS_Controller::handleStateMachTimeout()
                 }
             }
             else if(!m_bmsSystem->alarm_latch()){
-                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()) == 0){
+                if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()) == 1){
                     CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->alarm_out_id(),0);
                     //p->Command |= (1 <<12);
                     writeFrame(p);
