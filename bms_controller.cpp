@@ -193,6 +193,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
 //            m_bmsSystem->enableAlarmSystem(true); // move to state machine
             //connect(m_bmsSystem,&BMS_System::setBalancingVoltage,this,&BMS_Controller::setBalancingVoltage);
             connect(m_bmsSystem,&BMS_System::logMessage,this,&BMS_Controller::log);
+            connect(m_bmsSystem,&BMS_System::addPacket,this,&BMS_Controller::addFrame);
         }
     }
 
@@ -487,7 +488,7 @@ void BMS_Controller::handleSocketDataReceived()
             case 5: // SVC
                 switch(svi_cmd_map.value(sl[1])){
                 case 0: //SVI:AINMAP:GID:CH:OPT:VALUE
-                    qDebug()<<sl;
+                    //qDebug()<<sl;
                     if(sl.size() == 6){
                         CAN_Packet *p;
                         switch(sl[4].toInt()){
@@ -547,6 +548,42 @@ void BMS_Controller::handleSocketDataReceived()
                                 st->sviDevice()->soc(soc);
                             }
                         }
+                    }
+                    break;
+                case 3: // SVI:SBW:gid:temp:current
+                    if(sl.size() == 5){
+                        quint8 id = (quint8)sl[2].toInt();
+                        float temp = sl[3].toFloat();
+                        float current = sl[4].toFloat();
+                        foreach (BMS_Stack *st, this->m_bmsSystem->stacks()) {
+                            if(st->groupID() == id){
+                                CAN_Packet *p,*p2;
+                                p = BMS_SVIDevice::writeFanSetting(id,0,temp);
+                                addFrame(p);
+                                p2 = BMS_SVIDevice::writeFanSetting(id,1,current);
+                                addFrame(p2);
+                            }
+                        }
+                    }
+                    break;
+                case 4: // SVI:SBR:gid
+                    if(sl.size() == 3){
+                        quint8 id = (quint8)sl[2].toInt();
+                        CAN_Packet *p,*p2;
+                        p = BMS_SVIDevice::readFanSetting(id,0);
+                        addFrame(p);
+                        p2 = BMS_SVIDevice::readFanSetting(id,1);
+                        addFrame(p2);
+                    }
+                    break;
+                case 5: // SVI:SBF:gid:fid:state
+                    if(sl.size() == 5){
+                        quint8 id = (quint8)sl[2].toInt();
+                        quint8 fid =(quint8)sl[3].toInt();
+                        quint8 on =(quint8)sl[4].toInt();
+                        CAN_Packet *p;
+                        p = BMS_SVIDevice::writeFanControl(id,fid,on==1);
+                        addFrame(p);
                     }
                     break;
                 }
@@ -865,6 +902,7 @@ void BMS_Controller::handleStateMachTimeout()
         if(m_ioDelay == 0){
             m_ioDelay = 10;
             quint32 alarm = m_bmsSystem->alarmState();
+            //qDebug()<<Q_FUNC_INFO<<QString("Alarm:%1").arg(alarm);
 
             /*
              *  20221119: modify digital output 0 to control switch box
@@ -874,7 +912,7 @@ void BMS_Controller::handleStateMachTimeout()
             // warning @ low 16-bit
 //            if((alarm & 0xFFFF) != 0){
             //qDebug()<<"Alarm:"<<alarm;
-            if((alarm & 0x0005) == 0x0005){
+            if((alarm & 0x0005) != 0){
                 // check if bcu's digital output state is set or not
                 if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 1){
                     CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
