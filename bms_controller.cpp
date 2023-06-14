@@ -908,11 +908,15 @@ void BMS_Controller::handleStateMachTimeout()
              *  20221119: modify digital output 0 to control switch box
              *  Warning on StackOV && Cell OV (alarm bit mask == 0x05)
              *
+             *  20230614: modify digital output 0 to control switch box fan status
+             *  ON: fan error
+             *  OFF: fan OK
+             *  bit : 12
              */
             // warning @ low 16-bit
 //            if((alarm & 0xFFFF) != 0){
             //qDebug()<<"Alarm:"<<alarm;
-            if((alarm & 0x0005) != 0){
+            if((alarm & (1<<bms::SVI_FAN)) == 0){
                 // check if bcu's digital output state is set or not
                 if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->warinig_out_id()) == 1){
                     CAN_Packet *p = m_bmsSystem->bcu()->setDigitalOut(m_bmsSystem->warinig_out_id(),0);
@@ -928,6 +932,7 @@ void BMS_Controller::handleStateMachTimeout()
                     writeFrame(p);
                 }
             }
+
             if((alarm & 0xffff0000) != 0){
                 // check if bcu's digital output state is set or not
                 if(m_bmsSystem->bcu()->digitalOutState(m_bmsSystem->alarm_out_id()) == 0){
