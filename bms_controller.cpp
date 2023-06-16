@@ -178,7 +178,7 @@ BMS_Controller::BMS_Controller(QObject *parent) : QObject(parent)
                 }
                 else{
                     log("MODBUS Server start failed");
-                    qDebug()<<"Modbus Startu fail";
+                    qDebug()<<"Modbus Start fail";
                 }
 
             }
@@ -577,14 +577,24 @@ void BMS_Controller::handleSocketDataReceived()
                     }
                     break;
                 case 5: // SVI:SBF:gid:fid:state
+                    // stacks array base is 0
+                    // group id base is 1
                     if(sl.size() == 5){
                         quint8 id = (quint8)sl[2].toInt();
                         quint8 fid =(quint8)sl[3].toInt();
                         quint8 on =(quint8)sl[4].toInt();
-                        CAN_Packet *p;
-                        p = BMS_SVIDevice::writeFanControl(id,fid,on==1);
-                        addFrame(p);
+                        m_bmsSystem->stacks().at(id-1)->sviDevice()->ControlEnable(fid,on==1);
                     }
+                    break;
+                case 6: // SVI:FC:gid:time, force charge
+                    if(sl.size() == 4){
+                        quint8 id = (quint8)sl[2].toInt();
+                        int minutes =sl[3].toInt();
+                        if(minutes < m_bmsSystem->config()->stack.MaxChargeMinutes.toInt()){
+                            m_bmsSystem->stacks().at(id-1)->sviDevice()->forceChargeOn(minutes);
+                        }
+                    }
+
                     break;
                 }
                 break;
