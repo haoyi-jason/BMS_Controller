@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
 
     if(argc > 1){
         QTextStream out(stdout);
-        out << "22112401\n";
+        out << "23070301\n";
         return 0;
     }
     else{

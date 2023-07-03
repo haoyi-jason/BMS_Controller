@@ -594,7 +594,11 @@ void BMS_Controller::handleSocketDataReceived()
                             m_bmsSystem->stacks().at(id-1)->sviDevice()->forceChargeOn(minutes);
                         }
                     }
-
+                    break;
+                case 7: // SVI:SAVE
+                    quint8 id = (quint8)sl[2].toInt();
+                    CAN_Packet *p = BMS_SVIDevice::saveParam(id);
+                    addFrame(p);
                     break;
                 }
                 break;
