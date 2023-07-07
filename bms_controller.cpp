@@ -962,6 +962,8 @@ void BMS_Controller::handleStateMachTimeout()
                     writeFrame(p);
                 }
             }
+
+
         }
 
         if(m_balancingDelay>0){
